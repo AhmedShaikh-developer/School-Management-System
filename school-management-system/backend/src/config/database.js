@@ -49,6 +49,40 @@ const initializeMainDatabase = async () => {
       )
     `);
 
+    // Create custom domains table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS custom_domains (
+        id SERIAL PRIMARY KEY,
+        tenant_id VARCHAR(50) NOT NULL,
+        domain VARCHAR(255) UNIQUE NOT NULL,
+        verification_type VARCHAR(20) DEFAULT 'txt',
+        verification_status VARCHAR(20) DEFAULT 'pending',
+        verification_token VARCHAR(255),
+        verification_file_path VARCHAR(500),
+        status VARCHAR(20) DEFAULT 'active',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id) ON DELETE CASCADE
+      )
+    `);
+
+    // Create tenant branding table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tenant_branding (
+        id SERIAL PRIMARY KEY,
+        tenant_id VARCHAR(50) UNIQUE NOT NULL,
+        logo_url VARCHAR(500),
+        primary_color VARCHAR(7) DEFAULT '#2563eb',
+        secondary_color VARCHAR(7) DEFAULT '#1d4ed8',
+        accent_color VARCHAR(7) DEFAULT '#16a34a',
+        font_family VARCHAR(100) DEFAULT 'Inter',
+        custom_css TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id) ON DELETE CASCADE
+      )
+    `);
+
     // Create admin users table
     await client.query(`
       CREATE TABLE IF NOT EXISTS admin_users (
@@ -188,11 +222,150 @@ const checkDomainExists = async (domain) => {
   }
 };
 
+// Generate verification token for domain verification
+const generateVerificationToken = () => {
+  return `sms_verify_${Math.random().toString(36).substring(2, 15)}`;
+};
+
+// Add custom domain
+const addCustomDomain = async (tenantId, domain, verificationType = 'txt') => {
+  try {
+    const client = await mainPool.connect();
+    const verificationToken = generateVerificationToken();
+    
+    await client.query(`
+      INSERT INTO custom_domains (tenant_id, domain, verification_type, verification_token)
+      VALUES ($1, $2, $3, $4)
+    `, [tenantId, domain, verificationType, verificationToken]);
+    
+    client.release();
+    return { success: true, verificationToken };
+  } catch (error) {
+    console.error('Error adding custom domain:', error);
+    throw error;
+  }
+};
+
+// Get custom domain by domain name
+const getCustomDomainByDomain = async (domain) => {
+  try {
+    const client = await mainPool.connect();
+    const result = await client.query(`
+      SELECT cd.*, t.school_name, t.tenant_id 
+      FROM custom_domains cd
+      JOIN tenants t ON cd.tenant_id = t.tenant_id
+      WHERE cd.domain = $1 AND cd.status = 'active'
+    `, [domain]);
+    
+    client.release();
+    return result.rows[0] || null;
+  } catch (error) {
+    console.error('Error getting custom domain:', error);
+    throw error;
+  }
+};
+
+// Update domain verification status
+const updateDomainVerificationStatus = async (domain, status) => {
+  try {
+    const client = await mainPool.connect();
+    await client.query(`
+      UPDATE custom_domains 
+      SET verification_status = $1, updated_at = CURRENT_TIMESTAMP
+      WHERE domain = $2
+    `, [status, domain]);
+    
+    client.release();
+    return true;
+  } catch (error) {
+    console.error('Error updating domain verification status:', error);
+    throw error;
+  }
+};
+
+// Get tenant branding
+const getTenantBranding = async (tenantId) => {
+  try {
+    const client = await mainPool.connect();
+    const result = await client.query(`
+      SELECT * FROM tenant_branding WHERE tenant_id = $1
+    `, [tenantId]);
+    
+    client.release();
+    return result.rows[0] || null;
+  } catch (error) {
+    console.error('Error getting tenant branding:', error);
+    throw error;
+  }
+};
+
+// Update tenant branding
+const updateTenantBranding = async (tenantId, brandingData) => {
+  try {
+    const client = await mainPool.connect();
+    
+    const {
+      logo_url,
+      primary_color,
+      secondary_color,
+      accent_color,
+      font_family,
+      custom_css
+    } = brandingData;
+    
+    await client.query(`
+      INSERT INTO tenant_branding (tenant_id, logo_url, primary_color, secondary_color, accent_color, font_family, custom_css)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      ON CONFLICT (tenant_id) 
+      DO UPDATE SET 
+        logo_url = EXCLUDED.logo_url,
+        primary_color = EXCLUDED.primary_color,
+        secondary_color = EXCLUDED.secondary_color,
+        accent_color = EXCLUDED.accent_color,
+        font_family = EXCLUDED.font_family,
+        custom_css = EXCLUDED.custom_css,
+        updated_at = CURRENT_TIMESTAMP
+    `, [tenantId, logo_url, primary_color, secondary_color, accent_color, font_family, custom_css]);
+    
+    client.release();
+    return true;
+  } catch (error) {
+    console.error('Error updating tenant branding:', error);
+    throw error;
+  }
+};
+
+// Get tenant by custom domain
+const getTenantByCustomDomain = async (domain) => {
+  try {
+    const client = await mainPool.connect();
+    const result = await client.query(`
+      SELECT t.*, cd.verification_status
+      FROM tenants t
+      JOIN custom_domains cd ON t.tenant_id = cd.tenant_id
+      WHERE cd.domain = $1 AND cd.status = 'active' AND cd.verification_status = 'verified'
+    `, [domain]);
+    
+    client.release();
+    return result.rows[0] || null;
+  } catch (error) {
+    console.error('Error getting tenant by custom domain:', error);
+    throw error;
+  }
+};
+
 module.exports = {
   mainPool,
   createTenantPool,
   initializeMainDatabase,
   createTenantDatabase,
   dropTenantDatabase,
-  checkDomainExists
+  checkDomainExists,
+  addCustomDomain,
+  getCustomDomainByDomain,
+  updateDomainVerificationStatus,
+  getTenantBranding,
+  updateTenantBranding,
+  getTenantByCustomDomain,
+  generateVerificationToken
 }; 

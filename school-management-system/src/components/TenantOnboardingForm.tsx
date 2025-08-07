@@ -32,7 +32,7 @@ const step1ValidationSchema = Yup.object({
   domain: Yup.string()
     .min(3, 'Domain must be at least 3 characters')
     .max(100, 'Domain must not exceed 100 characters')
-    .matches(/^[a-zA-Z0-9-]+$/, 'Domain can only contain letters, numbers, and hyphens')
+    .matches(/^[a-zA-Z0-9.-]+$/, 'Domain can only contain letters, numbers, dots, and hyphens')
     .test('domain-format', 'Domain cannot contain consecutive dots or start/end with hyphens', function(value) {
       if (!value) return true;
       return !value.includes('..') && !value.startsWith('-') && !value.endsWith('-');
@@ -135,7 +135,11 @@ const step2ValidationSchema = Yup.object({
     .optional(),
 });
 
-const TenantOnboardingForm: React.FC = () => {
+interface TenantOnboardingFormProps {
+  onSuccess?: (tenantId: string) => void;
+}
+
+const TenantOnboardingForm: React.FC<TenantOnboardingFormProps> = ({ onSuccess }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [domainChecking, setDomainChecking] = useState(false);
   const [domainStatus, setDomainStatus] = useState<DomainCheckResult | null>(null);
@@ -195,6 +199,11 @@ const TenantOnboardingForm: React.FC = () => {
         resetForm();
         setStep(1);
         setDomainStatus(null);
+        
+        // Call onSuccess callback if provided
+        if (onSuccess && response.data.data?.tenantId) {
+          onSuccess(response.data.data.tenantId);
+        }
       } else {
         toast.error(response.data.message || 'Failed to onboard school');
       }
@@ -371,7 +380,14 @@ const TenantOnboardingForm: React.FC = () => {
                        <button
                          type="button"
                          onClick={nextStep}
-                         disabled={!isValid || !dirty || (domainStatus ? !domainStatus.available : false)}
+                         disabled={
+                           !isValid || 
+                           !dirty || 
+                           (domainStatus ? !domainStatus.available : false) ||
+                           !values.schoolName || 
+                           !values.domain || 
+                           !values.schoolType
+                         }
                          className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                        >
                          Next

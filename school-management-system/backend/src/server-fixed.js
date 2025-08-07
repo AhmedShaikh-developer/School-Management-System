@@ -2,11 +2,14 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const path = require('path');
 require('dotenv').config();
 
-const { initializeMainDatabase } = require('./config/database');
+const { initializeMainDatabase, getTenantByCustomDomain, getTenantBranding } = require('./config/database');
 const { onboardTenant } = require('./services/tenantService');
 const { checkDomainExists } = require('./config/database');
+const domainRoutes = require('./routes/domainRoutes');
+const brandingRoutes = require('./routes/brandingRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -22,12 +25,29 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+// Additional CORS headers for all responses
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', process.env.APP_URL || 'http://localhost:3000');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  next();
+});
+
 // Logging middleware
 app.use(morgan('combined'));
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Static file serving for uploads with CORS headers
+app.use('/uploads', (req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  next();
+}, express.static(path.join(__dirname, '../uploads')));
 
 // Request timeout middleware (5 minutes)
 app.use((req, res, next) => {
@@ -76,6 +96,32 @@ app.get('/api/tenants/domain/:domain/check', async (req, res) => {
       message: 'Error checking domain availability'
     });
   }
+});
+
+// Domain routing middleware
+app.use(async (req, res, next) => {
+  const host = req.get('host');
+  
+  // Skip for API routes and static files
+  if (req.path.startsWith('/api/') || req.path.startsWith('/uploads/')) {
+    return next();
+  }
+  
+  // Check if this is a custom domain
+  if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
+    try {
+      const tenant = await getTenantByCustomDomain(host);
+      if (tenant) {
+        // Add tenant info to request
+        req.tenant = tenant;
+        return next();
+      }
+    } catch (error) {
+      console.error('Error checking custom domain:', error);
+    }
+  }
+  
+  next();
 });
 
 // Tenant onboarding endpoint
@@ -137,6 +183,10 @@ app.post('/api/tenants/onboard', async (req, res) => {
     });
   }
 });
+
+// API routes
+app.use('/api/domains', domainRoutes);
+app.use('/api/branding', brandingRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
