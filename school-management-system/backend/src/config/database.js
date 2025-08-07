@@ -71,7 +71,9 @@ const initializeMainDatabase = async () => {
       CREATE TABLE IF NOT EXISTS tenant_branding (
         id SERIAL PRIMARY KEY,
         tenant_id VARCHAR(50) UNIQUE NOT NULL,
-        logo_url VARCHAR(500),
+        logo_data BYTEA,
+        logo_filename VARCHAR(255),
+        logo_mimetype VARCHAR(100),
         primary_color VARCHAR(7) DEFAULT '#2563eb',
         secondary_color VARCHAR(7) DEFAULT '#1d4ed8',
         accent_color VARCHAR(7) DEFAULT '#16a34a',
@@ -82,6 +84,46 @@ const initializeMainDatabase = async () => {
         FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id) ON DELETE CASCADE
       )
     `);
+
+    // Migrate existing tenant_branding table if needed
+    try {
+      // Check if logo_data column exists
+      const columnCheck = await client.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'tenant_branding' AND column_name = 'logo_data'
+      `);
+      
+      if (columnCheck.rows.length === 0) {
+        console.log('Migrating tenant_branding table to add logo columns...');
+        
+        // Add new logo columns
+        await client.query(`
+          ALTER TABLE tenant_branding 
+          ADD COLUMN logo_data BYTEA,
+          ADD COLUMN logo_filename VARCHAR(255),
+          ADD COLUMN logo_mimetype VARCHAR(100)
+        `);
+        
+        // Remove old logo_url column if it exists
+        const urlColumnCheck = await client.query(`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = 'tenant_branding' AND column_name = 'logo_url'
+        `);
+        
+        if (urlColumnCheck.rows.length > 0) {
+          await client.query(`
+            ALTER TABLE tenant_branding DROP COLUMN logo_url
+          `);
+        }
+        
+        console.log('Migration completed successfully');
+      }
+    } catch (migrationError) {
+      console.error('Migration error:', migrationError);
+      // Continue even if migration fails
+    }
 
     // Create admin users table
     await client.query(`
@@ -305,7 +347,9 @@ const updateTenantBranding = async (tenantId, brandingData) => {
     const client = await mainPool.connect();
     
     const {
-      logo_url,
+      logo_data,
+      logo_filename,
+      logo_mimetype,
       primary_color,
       secondary_color,
       accent_color,
@@ -314,18 +358,20 @@ const updateTenantBranding = async (tenantId, brandingData) => {
     } = brandingData;
     
     await client.query(`
-      INSERT INTO tenant_branding (tenant_id, logo_url, primary_color, secondary_color, accent_color, font_family, custom_css)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      INSERT INTO tenant_branding (tenant_id, logo_data, logo_filename, logo_mimetype, primary_color, secondary_color, accent_color, font_family, custom_css)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       ON CONFLICT (tenant_id) 
       DO UPDATE SET 
-        logo_url = EXCLUDED.logo_url,
+        logo_data = EXCLUDED.logo_data,
+        logo_filename = EXCLUDED.logo_filename,
+        logo_mimetype = EXCLUDED.logo_mimetype,
         primary_color = EXCLUDED.primary_color,
         secondary_color = EXCLUDED.secondary_color,
         accent_color = EXCLUDED.accent_color,
         font_family = EXCLUDED.font_family,
         custom_css = EXCLUDED.custom_css,
         updated_at = CURRENT_TIMESTAMP
-    `, [tenantId, logo_url, primary_color, secondary_color, accent_color, font_family, custom_css]);
+    `, [tenantId, logo_data, logo_filename, logo_mimetype, primary_color, secondary_color, accent_color, font_family, custom_css]);
     
     client.release();
     return true;

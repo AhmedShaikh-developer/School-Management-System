@@ -117,14 +117,14 @@ const step2ValidationSchema = Yup.object({
       
       // Check if it starts with + (international) or is a local number
       if (cleaned.startsWith('+')) {
-        // International format: +[country code][number]
-        const internationalRegex = /^\+[1-9]\d{1,14}$/;
+        // International format: +[country code][number] (total 7-15 digits)
+        const internationalRegex = /^\+[1-9]\d{6,14}$/;
         if (!internationalRegex.test(cleaned)) {
-          return this.createError({ message: 'Please provide a valid international phone number' });
+          return this.createError({ message: 'Please provide a valid international phone number (e.g., +1234567890)' });
         }
       } else {
-        // Local format: [number] (7-15 digits)
-        const localRegex = /^[1-9]\d{6,14}$/;
+        // Local format: [number] (7-15 digits, can start with 0 in some countries)
+        const localRegex = /^[0-9]\d{6,14}$/;
         if (!localRegex.test(cleaned)) {
           return this.createError({ message: 'Please provide a valid phone number (7-15 digits)' });
         }

@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node src/server-fixed.js",
     "dev": "nodemon src/server-fixed.js",
+    "setup-uploads": "node setup-uploads.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [

@@ -1,26 +1,8 @@
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs').promises;
 const { updateTenantBranding, getTenantBranding } = require('../config/database');
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: async (req, file, cb) => {
-    const uploadDir = path.join(__dirname, '../../uploads/logos');
-    try {
-      await fs.mkdir(uploadDir, { recursive: true });
-      cb(null, uploadDir);
-    } catch (error) {
-      cb(error);
-    }
-  },
-  filename: (req, file, cb) => {
-    const tenantId = req.params.tenantId || req.body.tenantId;
-    const timestamp = Date.now();
-    const ext = path.extname(file.originalname);
-    cb(null, `${tenantId}_${timestamp}${ext}`);
-  }
-});
+// Configure multer for memory storage (no file system)
+const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
   // Allow only image files
@@ -43,7 +25,9 @@ const upload = multer({
 const updateBranding = async (tenantId, brandingData) => {
   try {
     const {
-      logo_url,
+      logo_data,
+      logo_filename,
+      logo_mimetype,
       primary_color,
       secondary_color,
       accent_color,
@@ -63,10 +47,12 @@ const updateBranding = async (tenantId, brandingData) => {
       throw new Error('Invalid accent color format');
     }
     
-    // Get existing branding to preserve logo_url if not provided
+    // Get existing branding to preserve logo if not provided
     const existingBranding = await getTenantBranding(tenantId);
     const updateData = {
-      logo_url: logo_url || (existingBranding ? existingBranding.logo_url : null),
+      logo_data: logo_data || (existingBranding ? existingBranding.logo_data : null),
+      logo_filename: logo_filename || (existingBranding ? existingBranding.logo_filename : null),
+      logo_mimetype: logo_mimetype || (existingBranding ? existingBranding.logo_mimetype : null),
       primary_color,
       secondary_color,
       accent_color,
@@ -82,7 +68,7 @@ const updateBranding = async (tenantId, brandingData) => {
       message: 'Branding updated successfully',
       data: {
         tenantId,
-        logo_url: updateData.logo_url,
+        logo_filename: updateData.logo_filename,
         primary_color,
         secondary_color,
         accent_color,
@@ -107,7 +93,7 @@ const getBranding = async (tenantId) => {
         success: true,
         data: {
           tenantId,
-          logo_url: null,
+          logo_filename: null,
           primary_color: '#2563eb',
           secondary_color: '#1d4ed8',
           accent_color: '#16a34a',
@@ -119,7 +105,16 @@ const getBranding = async (tenantId) => {
     
     return {
       success: true,
-      data: branding
+      data: {
+        tenantId: branding.tenant_id,
+        logo_filename: branding.logo_filename,
+        logo_mimetype: branding.logo_mimetype,
+        primary_color: branding.primary_color,
+        secondary_color: branding.secondary_color,
+        accent_color: branding.accent_color,
+        font_family: branding.font_family,
+        custom_css: branding.custom_css
+      }
     };
   } catch (error) {
     console.error('Error getting branding:', error);
@@ -178,27 +173,26 @@ const generateDynamicCSS = async (tenantId) => {
   }
 };
 
-// Upload logo
+// Upload logo (store in database as binary data)
 const uploadLogo = async (tenantId, file) => {
   try {
     if (!file) {
       throw new Error('No file uploaded');
     }
     
-    // Generate logo URL
-    const logoUrl = `/uploads/logos/${file.filename}`;
-    
-    // Update branding with new logo URL
+    // Store logo data in database
     await updateTenantBranding(tenantId, {
-      logo_url: logoUrl
+      logo_data: file.buffer,
+      logo_filename: file.originalname,
+      logo_mimetype: file.mimetype
     });
     
     return {
       success: true,
       message: 'Logo uploaded successfully',
       data: {
-        logo_url: logoUrl,
-        filename: file.filename
+        logo_filename: file.originalname,
+        logo_mimetype: file.mimetype
       }
     };
   } catch (error) {
@@ -210,22 +204,12 @@ const uploadLogo = async (tenantId, file) => {
 // Delete logo
 const deleteLogo = async (tenantId) => {
   try {
-    const branding = await getTenantBranding(tenantId);
-    
-    if (branding && branding.logo_url) {
-      // Delete file from filesystem
-      const logoPath = path.join(__dirname, '../../', branding.logo_url);
-      try {
-        await fs.unlink(logoPath);
-      } catch (error) {
-        console.error('Error deleting logo file:', error);
-      }
-      
-      // Update branding to remove logo URL
-      await updateTenantBranding(tenantId, {
-        logo_url: null
-      });
-    }
+    // Update branding to remove logo data
+    await updateTenantBranding(tenantId, {
+      logo_data: null,
+      logo_filename: null,
+      logo_mimetype: null
+    });
     
     return {
       success: true,
@@ -237,11 +221,32 @@ const deleteLogo = async (tenantId) => {
   }
 };
 
+// Get logo data for serving
+const getLogoData = async (tenantId) => {
+  try {
+    const branding = await getTenantBranding(tenantId);
+    
+    if (!branding || !branding.logo_data) {
+      return null;
+    }
+    
+    return {
+      data: branding.logo_data,
+      filename: branding.logo_filename,
+      mimetype: branding.logo_mimetype
+    };
+  } catch (error) {
+    console.error('Error getting logo data:', error);
+    return null;
+  }
+};
+
 module.exports = {
   upload,
   updateBranding,
   getBranding,
   generateDynamicCSS,
   uploadLogo,
-  deleteLogo
+  deleteLogo,
+  getLogoData
 }; 

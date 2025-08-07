@@ -51,31 +51,36 @@ A comprehensive multi-tenant school management system with self-service tenant o
 
 ```
 school-management-system/
-├── frontend/                 # React application
-│   ├── src/
-│   │   ├── components/
-│   │   │   └── TenantOnboardingForm.tsx
-│   │   ├── App.tsx
-│   │   └── index.css
-│   ├── package.json
-│   └── .env
+├── src/                      # React frontend
+│   ├── components/
+│   │   ├── TenantOnboardingForm.tsx
+│   │   ├── CustomDomainSetup.tsx
+│   │   └── BrandingCustomization.tsx
+│   ├── App.tsx
+│   └── index.css
 ├── backend/                  # Node.js API
 │   ├── src/
 │   │   ├── config/
 │   │   │   └── database.js
 │   │   ├── services/
 │   │   │   ├── tenantService.js
-│   │   │   └── emailService.js
+│   │   │   ├── emailService.js
+│   │   │   ├── brandingService.js
+│   │   │   └── domainVerificationService.js
 │   │   ├── middleware/
 │   │   │   └── validation.js
 │   │   ├── controllers/
-│   │   │   └── tenantController.js
+│   │   │   ├── tenantController.js
+│   │   │   ├── brandingController.js
+│   │   │   └── domainController.js
 │   │   ├── routes/
-│   │   │   └── tenantRoutes.js
+│   │   │   ├── tenantRoutes.js
+│   │   │   ├── brandingRoutes.js
+│   │   │   └── domainRoutes.js
 │   │   └── server-fixed.js
 │   ├── package.json
-│   └── .env
-├── EMAIL_SETUP.md           # Email configuration guide
+│   └── env.example
+├── PROJECT_STATUS.md        # Current project status
 └── README.md
 ```
 

@@ -14,7 +14,8 @@ interface BrandingFormData {
 
 interface BrandingData {
   tenantId: string;
-  logo_url: string | null;
+  logo_filename: string | null;
+  logo_mimetype: string | null;
   primary_color: string;
   secondary_color: string;
   accent_color: string;
@@ -206,10 +207,10 @@ const BrandingCustomization: React.FC<{ tenantId: string }> = ({ tenantId }) => 
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Logo</h2>
         
         <div className="space-y-4">
-          {branding?.logo_url && (
+          {branding?.logo_filename && (
             <div className="flex items-center space-x-4">
               <img 
-                src={`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}${branding.logo_url}`}
+                src={`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/branding/${tenantId}/logo`}
                 alt="School Logo"
                 className="w-20 h-20 object-contain border border-gray-200 rounded"
               />

@@ -4,6 +4,7 @@ const {
   generateDynamicCSS,
   uploadLogo,
   deleteLogo,
+  getLogoData,
   upload
 } = require('../services/brandingService');
 
@@ -96,6 +97,39 @@ const getDynamicCSS = async (req, res) => {
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to generate CSS'
+    });
+  }
+};
+
+// Get logo data from database
+const getTenantLogoData = async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+    
+    if (!tenantId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Tenant ID is required'
+      });
+    }
+    
+    const logoData = await getLogoData(tenantId);
+    
+    if (!logoData) {
+      return res.status(404).json({
+        success: false,
+        message: 'Logo not found'
+      });
+    }
+    
+    res.set('Content-Type', logoData.mimetype);
+    res.set('Content-Disposition', `inline; filename="${logoData.filename}"`);
+    res.send(logoData.data);
+  } catch (error) {
+    console.error('Error getting logo data:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to get logo data'
     });
   }
 };
@@ -250,6 +284,7 @@ module.exports = {
   updateTenantBranding,
   getTenantBranding,
   getDynamicCSS,
+  getTenantLogoData,
   uploadTenantLogo,
   deleteTenantLogo,
   getAvailableFonts,

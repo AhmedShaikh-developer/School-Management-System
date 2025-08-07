@@ -4,6 +4,7 @@ const {
   updateTenantBranding,
   getTenantBranding,
   getDynamicCSS,
+  getTenantLogoData,
   uploadTenantLogo,
   deleteTenantLogo,
   getAvailableFonts,
@@ -19,6 +20,9 @@ router.get('/:tenantId', getTenantBranding);
 
 // Get dynamic CSS for tenant
 router.get('/:tenantId/css', getDynamicCSS);
+
+// Get logo data
+router.get('/:tenantId/logo', getTenantLogoData);
 
 // Upload logo
 router.post('/:tenantId/logo', upload.single('logo'), uploadTenantLogo);
