@@ -35,7 +35,16 @@ const updateBranding = async (tenantId, brandingData) => {
       custom_css
     } = brandingData;
     
-    // Validate colors
+    // Debug: Log received values
+    console.log('Received branding data:', {
+      primary_color,
+      secondary_color,
+      accent_color,
+      font_family,
+      custom_css
+    });
+    
+    // Validate colors if provided
     const colorRegex = /^#[0-9A-F]{6}$/i;
     if (primary_color && !colorRegex.test(primary_color)) {
       throw new Error('Invalid primary color format');
@@ -47,18 +56,28 @@ const updateBranding = async (tenantId, brandingData) => {
       throw new Error('Invalid accent color format');
     }
     
-    // Get existing branding to preserve logo if not provided
+    // Get existing branding to preserve values that aren't being updated
     const existingBranding = await getTenantBranding(tenantId);
+    
+    // Prepare update data - only update fields that are provided
     const updateData = {
-      logo_data: logo_data || (existingBranding ? existingBranding.logo_data : null),
-      logo_filename: logo_filename || (existingBranding ? existingBranding.logo_filename : null),
-      logo_mimetype: logo_mimetype || (existingBranding ? existingBranding.logo_mimetype : null),
-      primary_color,
-      secondary_color,
-      accent_color,
-      font_family,
-      custom_css
+      logo_data: logo_data !== undefined ? logo_data : (existingBranding ? existingBranding.logo_data : null),
+      logo_filename: logo_filename !== undefined ? logo_filename : (existingBranding ? existingBranding.logo_filename : null),
+      logo_mimetype: logo_mimetype !== undefined ? logo_mimetype : (existingBranding ? existingBranding.logo_mimetype : null),
+      primary_color: (primary_color !== undefined && primary_color !== '') ? primary_color : (existingBranding ? existingBranding.primary_color : '#2563eb'),
+      secondary_color: (secondary_color !== undefined && secondary_color !== '') ? secondary_color : (existingBranding ? existingBranding.secondary_color : '#1d4ed8'),
+      accent_color: (accent_color !== undefined && accent_color !== '') ? accent_color : (existingBranding ? existingBranding.accent_color : '#16a34a'),
+      font_family: (font_family !== undefined && font_family !== '') ? font_family : (existingBranding ? existingBranding.font_family : 'Inter'),
+      custom_css: custom_css !== undefined ? custom_css : (existingBranding ? existingBranding.custom_css : '')
     };
+    
+    // Debug: Log final update data
+    console.log('Final update data:', {
+      primary_color: updateData.primary_color,
+      secondary_color: updateData.secondary_color,
+      accent_color: updateData.accent_color,
+      font_family: updateData.font_family
+    });
     
     // Update branding in database
     await updateTenantBranding(tenantId, updateData);
@@ -69,11 +88,11 @@ const updateBranding = async (tenantId, brandingData) => {
       data: {
         tenantId,
         logo_filename: updateData.logo_filename,
-        primary_color,
-        secondary_color,
-        accent_color,
-        font_family,
-        custom_css
+        primary_color: updateData.primary_color,
+        secondary_color: updateData.secondary_color,
+        accent_color: updateData.accent_color,
+        font_family: updateData.font_family,
+        custom_css: updateData.custom_css
       }
     };
   } catch (error) {
@@ -180,12 +199,23 @@ const uploadLogo = async (tenantId, file) => {
       throw new Error('No file uploaded');
     }
     
-    // Store logo data in database
-    await updateTenantBranding(tenantId, {
+    // Get existing branding to preserve other fields
+    const existingBranding = await getTenantBranding(tenantId);
+    
+    // Only update logo-related fields, preserve all other branding data
+    const updateData = {
       logo_data: file.buffer,
       logo_filename: file.originalname,
-      logo_mimetype: file.mimetype
-    });
+      logo_mimetype: file.mimetype,
+      primary_color: existingBranding ? existingBranding.primary_color : '#2563eb',
+      secondary_color: existingBranding ? existingBranding.secondary_color : '#1d4ed8',
+      accent_color: existingBranding ? existingBranding.accent_color : '#16a34a',
+      font_family: existingBranding ? existingBranding.font_family : 'Inter',
+      custom_css: existingBranding ? existingBranding.custom_css : ''
+    };
+    
+    // Store logo data in database
+    await updateTenantBranding(tenantId, updateData);
     
     return {
       success: true,
@@ -204,12 +234,23 @@ const uploadLogo = async (tenantId, file) => {
 // Delete logo
 const deleteLogo = async (tenantId) => {
   try {
-    // Update branding to remove logo data
-    await updateTenantBranding(tenantId, {
+    // Get existing branding to preserve other fields
+    const existingBranding = await getTenantBranding(tenantId);
+    
+    // Only update logo-related fields, preserve all other branding data
+    const updateData = {
       logo_data: null,
       logo_filename: null,
-      logo_mimetype: null
-    });
+      logo_mimetype: null,
+      primary_color: existingBranding ? existingBranding.primary_color : '#2563eb',
+      secondary_color: existingBranding ? existingBranding.secondary_color : '#1d4ed8',
+      accent_color: existingBranding ? existingBranding.accent_color : '#16a34a',
+      font_family: existingBranding ? existingBranding.font_family : 'Inter',
+      custom_css: existingBranding ? existingBranding.custom_css : ''
+    };
+    
+    // Update branding in database
+    await updateTenantBranding(tenantId, updateData);
     
     return {
       success: true,

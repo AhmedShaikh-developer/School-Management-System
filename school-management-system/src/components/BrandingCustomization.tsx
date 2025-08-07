@@ -55,6 +55,7 @@ const BrandingCustomization: React.FC<{ tenantId: string }> = ({ tenantId }) => 
   const [colorPresets, setColorPresets] = useState<ColorPreset[]>([]);
   const [fonts, setFonts] = useState<FontOption[]>([]);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const formikRef = React.useRef<any>(null);
 
   const initialValues: BrandingFormData = {
     primary_color: '#2563eb',
@@ -112,6 +113,16 @@ const BrandingCustomization: React.FC<{ tenantId: string }> = ({ tenantId }) => 
 
   const handleSubmit = async (values: BrandingFormData, { setSubmitting }: any) => {
     setLoading(true);
+    
+    // Debug: Log the values being sent
+    console.log('Submitting branding values:', values);
+    console.log('Values type check:', {
+      primary_color: typeof values.primary_color,
+      secondary_color: typeof values.secondary_color,
+      accent_color: typeof values.accent_color,
+      font_family: typeof values.font_family
+    });
+    
     try {
       const response = await axios.put(
         `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/branding/${tenantId}`,
@@ -189,15 +200,10 @@ const BrandingCustomization: React.FC<{ tenantId: string }> = ({ tenantId }) => 
   };
 
   const applyColorPreset = (preset: ColorPreset) => {
-    const form = document.querySelector('form');
-    if (form) {
-      const primaryInput = form.querySelector('[name="primary_color"]') as HTMLInputElement;
-      const secondaryInput = form.querySelector('[name="secondary_color"]') as HTMLInputElement;
-      const accentInput = form.querySelector('[name="accent_color"]') as HTMLInputElement;
-
-      if (primaryInput) primaryInput.value = preset.primary;
-      if (secondaryInput) secondaryInput.value = preset.secondary;
-      if (accentInput) accentInput.value = preset.accent;
+    if (formikRef.current) {
+      formikRef.current.setFieldValue('primary_color', preset.primary);
+      formikRef.current.setFieldValue('secondary_color', preset.secondary);
+      formikRef.current.setFieldValue('accent_color', preset.accent);
     }
   };
 
@@ -273,6 +279,7 @@ const BrandingCustomization: React.FC<{ tenantId: string }> = ({ tenantId }) => 
         </div>
 
         <Formik
+          innerRef={formikRef}
           initialValues={branding ? {
             primary_color: branding.primary_color || initialValues.primary_color,
             secondary_color: branding.secondary_color || initialValues.secondary_color,

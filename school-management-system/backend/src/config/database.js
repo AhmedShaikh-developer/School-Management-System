@@ -357,6 +357,17 @@ const updateTenantBranding = async (tenantId, brandingData) => {
       custom_css
     } = brandingData;
     
+    // Debug: Log the values being sent to database
+    console.log('Database update values:', {
+      tenantId,
+      primary_color,
+      secondary_color,
+      accent_color,
+      font_family,
+      custom_css
+    });
+    
+    // Use CASE statements to handle empty strings properly
     await client.query(`
       INSERT INTO tenant_branding (tenant_id, logo_data, logo_filename, logo_mimetype, primary_color, secondary_color, accent_color, font_family, custom_css)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -365,11 +376,27 @@ const updateTenantBranding = async (tenantId, brandingData) => {
         logo_data = EXCLUDED.logo_data,
         logo_filename = EXCLUDED.logo_filename,
         logo_mimetype = EXCLUDED.logo_mimetype,
-        primary_color = EXCLUDED.primary_color,
-        secondary_color = EXCLUDED.secondary_color,
-        accent_color = EXCLUDED.accent_color,
-        font_family = EXCLUDED.font_family,
-        custom_css = EXCLUDED.custom_css,
+        primary_color = CASE 
+          WHEN EXCLUDED.primary_color IS NOT NULL AND EXCLUDED.primary_color != '' 
+          THEN EXCLUDED.primary_color 
+          ELSE tenant_branding.primary_color 
+        END,
+        secondary_color = CASE 
+          WHEN EXCLUDED.secondary_color IS NOT NULL AND EXCLUDED.secondary_color != '' 
+          THEN EXCLUDED.secondary_color 
+          ELSE tenant_branding.secondary_color 
+        END,
+        accent_color = CASE 
+          WHEN EXCLUDED.accent_color IS NOT NULL AND EXCLUDED.accent_color != '' 
+          THEN EXCLUDED.accent_color 
+          ELSE tenant_branding.accent_color 
+        END,
+        font_family = CASE 
+          WHEN EXCLUDED.font_family IS NOT NULL AND EXCLUDED.font_family != '' 
+          THEN EXCLUDED.font_family 
+          ELSE tenant_branding.font_family 
+        END,
+        custom_css = COALESCE(EXCLUDED.custom_css, tenant_branding.custom_css),
         updated_at = CURRENT_TIMESTAMP
     `, [tenantId, logo_data, logo_filename, logo_mimetype, primary_color, secondary_color, accent_color, font_family, custom_css]);
     
