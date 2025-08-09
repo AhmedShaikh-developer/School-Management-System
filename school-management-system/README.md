@@ -13,6 +13,11 @@ A comprehensive multi-tenant school management system with self-service tenant o
 - **Welcome email system** with login credentials
 - **Rollback mechanism** for failed onboarding
 - **Performance optimized** (completes in under 5 minutes)
+- **Proper URL-based routing** with React Router
+- **Custom domain setup** with verification
+- **Branding customization** with logo and color management
+- **Attendance management** with multiple modes (manual, QR, biometric)
+- **Super admin controls** for biometric settings
 
 ### 🎯 Technical Requirements Met
 - ✅ Self-service tenant onboarding module
@@ -23,11 +28,17 @@ A comprehensive multi-tenant school management system with self-service tenant o
 - ✅ Checks for duplicate domains
 - ✅ Rollback if DB creation fails
 - ✅ Completes in under 5 minutes
+- ✅ Proper routing with distinct URLs
+- ✅ Custom domain setup and verification
+- ✅ Branding customization
+- ✅ Attendance system with multiple modes
+- ✅ Super admin biometric management
 
 ## 🛠️ Tech Stack
 
 ### Frontend
 - **React.js** with TypeScript
+- **React Router** for navigation and routing
 - **Formik** for form management
 - **Yup** for validation
 - **Axios** for API calls
@@ -47,16 +58,37 @@ A comprehensive multi-tenant school management system with self-service tenant o
 - **Tenant Databases**: `school_tenant_[ID]` (isolated data)
 - **Multi-tenant architecture** with data isolation
 
+## 🗺️ Application Routes
+
+The application uses React Router for proper URL-based navigation:
+
+- **`/`** - Home/Landing page with options to start onboarding or access super admin
+- **`/onboarding`** - Multi-step school onboarding form
+- **`/domain?tenantId=<id>`** - Custom domain setup for a specific tenant
+- **`/branding?tenantId=<id>`** - Branding customization for a specific tenant
+- **`/attendance?tenantId=<id>`** - Attendance management for a specific tenant
+- **`/super-admin`** - Super admin biometric management portal
+
+### Navigation Flow
+1. **Home Page** (`/`) - Landing page with navigation options
+2. **Onboarding** (`/onboarding`) - School registration process
+3. **Domain Setup** (`/domain?tenantId=<id>`) - Custom domain configuration
+4. **Branding** (`/branding?tenantId=<id>`) - Logo and color customization
+5. **Attendance** (`/attendance?tenantId=<id>`) - Attendance system management
+6. **Super Admin** (`/super-admin`) - Platform-wide biometric settings
+
 ## 📁 Project Structure
 
 ```
 school-management-system/
 ├── src/                      # React frontend
 │   ├── components/
-│   │   ├── TenantOnboardingForm.tsx
-│   │   ├── CustomDomainSetup.tsx
-│   │   └── BrandingCustomization.tsx
-│   ├── App.tsx
+│   │   ├── TenantOnboardingForm.tsx    # Multi-step onboarding form
+│   │   ├── CustomDomainSetup.tsx       # Domain setup and verification
+│   │   ├── BrandingCustomization.tsx   # Logo and color customization
+│   │   ├── AttendanceAdmin.tsx         # Attendance management
+│   │   └── SuperAdminBiometric.tsx     # Super admin biometric controls
+│   ├── App.tsx                         # Main app with routing
 │   └── index.css
 ├── backend/                  # Node.js API
 │   ├── src/
@@ -66,21 +98,28 @@ school-management-system/
 │   │   │   ├── tenantService.js
 │   │   │   ├── emailService.js
 │   │   │   ├── brandingService.js
-│   │   │   └── domainVerificationService.js
+│   │   │   ├── domainVerificationService.js
+│   │   │   ├── attendanceService.js
+│   │   │   └── smsService.js
 │   │   ├── middleware/
 │   │   │   └── validation.js
 │   │   ├── controllers/
 │   │   │   ├── tenantController.js
 │   │   │   ├── brandingController.js
-│   │   │   └── domainController.js
+│   │   │   ├── domainController.js
+│   │   │   ├── attendanceController.js
+│   │   │   └── superAdminController.js
 │   │   ├── routes/
 │   │   │   ├── tenantRoutes.js
 │   │   │   ├── brandingRoutes.js
-│   │   │   └── domainRoutes.js
+│   │   │   ├── domainRoutes.js
+│   │   │   ├── attendanceRoutes.js
+│   │   │   └── superAdminRoutes.js
 │   │   └── server-fixed.js
 │   ├── package.json
 │   └── env.example
 ├── PROJECT_STATUS.md        # Current project status
+├── ATTENDANCE_SYSTEM_README.md  # Attendance system documentation
 └── README.md
 ```
 

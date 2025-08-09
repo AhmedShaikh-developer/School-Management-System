@@ -85,6 +85,52 @@ const initializeMainDatabase = async () => {
       )
     `);
 
+    // Create super admin controls for biometric attendance
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tenant_biometric_settings (
+        id SERIAL PRIMARY KEY,
+        tenant_id VARCHAR(50) UNIQUE NOT NULL,
+        biometric_enabled BOOLEAN DEFAULT FALSE,
+        device_configuration JSONB,
+        allowed_devices TEXT[],
+        max_devices INTEGER DEFAULT 5,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id) ON DELETE CASCADE
+      )
+    `);
+
+    // Create super admins table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS super_admins (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(100) UNIQUE NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        full_name VARCHAR(255) NOT NULL,
+        role VARCHAR(50) DEFAULT 'super_admin',
+        is_active BOOLEAN DEFAULT TRUE,
+        last_login TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Insert default super admin if not exists
+    const bcrypt = require('bcryptjs');
+    const defaultPassword = process.env.SUPER_ADMIN_DEFAULT_PASSWORD || 'admin123';
+    const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+    
+    await client.query(`
+      INSERT INTO super_admins (username, email, password_hash, full_name, role)
+      VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (username) DO UPDATE SET
+        email = EXCLUDED.email,
+        password_hash = EXCLUDED.password_hash,
+        full_name = EXCLUDED.full_name,
+        role = EXCLUDED.role
+    `, ['admin', 'binsolswork@gmail.com', hashedPassword, 'Super Administrator', 'super_admin']);
+
     // Migrate existing tenant_branding table if needed
     try {
       // Check if logo_data column exists
@@ -163,7 +209,7 @@ const createTenantDatabase = async (tenantId, schoolName) => {
     const tenantPool = createTenantPool(tenantId);
     const tenantClient = await tenantPool.connect();
 
-    // Create tenant schema
+    // Create users table (existing)
     await tenantClient.query(`
       CREATE TABLE users (
         id SERIAL PRIMARY KEY,
@@ -177,6 +223,7 @@ const createTenantDatabase = async (tenantId, schoolName) => {
       )
     `);
 
+    // Create students table (extended)
     await tenantClient.query(`
       CREATE TABLE students (
         id SERIAL PRIMARY KEY,
@@ -186,13 +233,20 @@ const createTenantDatabase = async (tenantId, schoolName) => {
         email VARCHAR(255),
         phone VARCHAR(20),
         date_of_birth DATE,
-        grade VARCHAR(20),
+        gender VARCHAR(10),
+        address TEXT,
+        parent_id INTEGER,
+        class_id INTEGER,
+        enrollment_date DATE DEFAULT CURRENT_DATE,
         status VARCHAR(20) DEFAULT 'active',
+        photo_url VARCHAR(500),
+        biometric_data JSONB,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
+    // Create teachers table (extended)
     await tenantClient.query(`
       CREATE TABLE teachers (
         id SERIAL PRIMARY KEY,
@@ -201,30 +255,164 @@ const createTenantDatabase = async (tenantId, schoolName) => {
         last_name VARCHAR(100) NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
         phone VARCHAR(20),
-        subject VARCHAR(100),
+        qualification TEXT,
+        experience_years INTEGER,
+        subjects TEXT[],
         status VARCHAR(20) DEFAULT 'active',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
+    // Create classes table (extended)
     await tenantClient.query(`
       CREATE TABLE classes (
         id SERIAL PRIMARY KEY,
         class_name VARCHAR(100) NOT NULL,
-        grade VARCHAR(20),
-        teacher_id INTEGER REFERENCES teachers(id),
+        grade_level VARCHAR(50),
         capacity INTEGER DEFAULT 30,
+        teacher_id INTEGER REFERENCES teachers(id),
+        academic_year VARCHAR(20),
         status VARCHAR(20) DEFAULT 'active',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+
+    // Create attendance configuration table
+    await tenantClient.query(`
+      CREATE TABLE attendance_config (
+        id SERIAL PRIMARY KEY,
+        class_id INTEGER REFERENCES classes(id),
+        attendance_mode VARCHAR(20) DEFAULT 'manual', -- manual, qr, biometric
+        grace_time_minutes INTEGER DEFAULT 15,
+        cut_off_time_minutes INTEGER DEFAULT 30,
+        sms_alerts_enabled BOOLEAN DEFAULT TRUE,
+        offline_mode_enabled BOOLEAN DEFAULT FALSE,
+        conflict_resolution VARCHAR(20) DEFAULT 'latest', -- latest, earliest, manual
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create attendance records table
+    await tenantClient.query(`
+      CREATE TABLE attendance (
+        id SERIAL PRIMARY KEY,
+        student_id INTEGER REFERENCES students(id),
+        class_id INTEGER REFERENCES classes(id),
+        date DATE NOT NULL,
+        time_in TIME,
+        time_out TIME,
+        status VARCHAR(20) NOT NULL, -- present, absent, late, early_departure
+        attendance_mode VARCHAR(20) NOT NULL, -- manual, qr, biometric
+        device_id VARCHAR(100),
+        location_data JSONB,
+        remarks TEXT,
+        recorded_by INTEGER REFERENCES teachers(id),
+        conflict_resolved BOOLEAN DEFAULT FALSE,
+        conflict_resolution_method VARCHAR(20),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create QR codes table for QR-based attendance
+    await tenantClient.query(`
+      CREATE TABLE qr_codes (
+        id SERIAL PRIMARY KEY,
+        class_id INTEGER REFERENCES classes(id),
+        qr_code VARCHAR(255) UNIQUE NOT NULL,
+        valid_from TIMESTAMP NOT NULL,
+        valid_until TIMESTAMP NOT NULL,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_by INTEGER REFERENCES teachers(id),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create biometric devices table
+    await tenantClient.query(`
+      CREATE TABLE biometric_devices (
+        id SERIAL PRIMARY KEY,
+        device_id VARCHAR(100) UNIQUE NOT NULL,
+        device_name VARCHAR(255) NOT NULL,
+        device_type VARCHAR(50), -- fingerprint, facial, iris
+        location VARCHAR(255),
+        status VARCHAR(20) DEFAULT 'active',
+        last_sync TIMESTAMP,
+        configuration JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create SMS alerts table
+    await tenantClient.query(`
+      CREATE TABLE sms_alerts (
+        id SERIAL PRIMARY KEY,
+        student_id INTEGER REFERENCES students(id),
+        alert_type VARCHAR(50) NOT NULL, -- absence, late, early_departure
+        message TEXT NOT NULL,
+        phone_number VARCHAR(20) NOT NULL,
+        status VARCHAR(20) DEFAULT 'pending', -- pending, sent, failed
+        sent_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create attendance conflicts table
+    await tenantClient.query(`
+      CREATE TABLE attendance_conflicts (
+        id SERIAL PRIMARY KEY,
+        student_id INTEGER REFERENCES students(id),
+        class_id INTEGER REFERENCES classes(id),
+        date DATE NOT NULL,
+        conflict_type VARCHAR(50), -- duplicate_entry, time_overlap, device_mismatch
+        conflict_data JSONB,
+        resolution_method VARCHAR(20),
+        resolved_by INTEGER REFERENCES teachers(id),
+        resolved_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create offline attendance queue table
+    await tenantClient.query(`
+      CREATE TABLE offline_attendance_queue (
+        id SERIAL PRIMARY KEY,
+        student_id INTEGER REFERENCES students(id),
+        class_id INTEGER REFERENCES classes(id),
+        date DATE NOT NULL,
+        time_in TIME,
+        time_out TIME,
+        status VARCHAR(20) NOT NULL,
+        device_id VARCHAR(100),
+        sync_status VARCHAR(20) DEFAULT 'pending', -- pending, synced, failed
+        sync_attempts INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Add indexes for better performance
+    await tenantClient.query(`
+      CREATE INDEX idx_students_class_id ON students(class_id);
+      CREATE INDEX idx_attendance_student_date ON attendance(student_id, date);
+      CREATE INDEX idx_attendance_class_date ON attendance(class_id, date);
+      CREATE INDEX idx_attendance_mode ON attendance(attendance_mode);
+      CREATE INDEX idx_qr_codes_class_valid ON qr_codes(class_id, valid_from, valid_until);
+      CREATE INDEX idx_sms_alerts_status ON sms_alerts(status);
+      CREATE INDEX idx_offline_queue_sync_status ON offline_attendance_queue(sync_status);
     `);
 
     tenantClient.release();
     tenantPool.end();
     
-    console.log(`Tenant database ${tenantDbName} created successfully`);
+    console.log(`Tenant database ${tenantDbName} created successfully with attendance system`);
     return true;
   } catch (error) {
     console.error(`Error creating tenant database ${tenantDbName}:`, error);

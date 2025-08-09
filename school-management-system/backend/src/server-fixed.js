@@ -10,6 +10,10 @@ const { onboardTenant } = require('./services/tenantService');
 const { checkDomainExists } = require('./config/database');
 const domainRoutes = require('./routes/domainRoutes');
 const brandingRoutes = require('./routes/brandingRoutes');
+const attendanceRoutes = require('./routes/attendanceRoutes');
+const superAdminRoutes = require('./routes/superAdminRoutes');
+const authRoutes = require('./routes/authRoutes');
+const { authenticateToken } = require('./middleware/auth');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -97,29 +101,28 @@ app.get('/api/tenants/domain/:domain/check', async (req, res) => {
 app.use(async (req, res, next) => {
   const host = req.get('host');
   
-  // Skip for API routes and static files
-  if (req.path.startsWith('/api/') || req.path.startsWith('/uploads/')) {
+  // Skip domain routing for static files and API routes
+  if (req.path.startsWith('/static/') || req.path.startsWith('/api/')) {
     return next();
   }
   
-  // Check if this is a custom domain
-  if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
+  // Skip localhost and development domains
+  if (host && !host.includes('localhost') && !host.includes('127.0.0.1') && !host.includes('.test') && !host.includes('.dev')) {
     try {
       const tenant = await getTenantByCustomDomain(host);
       if (tenant) {
-        // Add tenant info to request
+        // Add tenant info to request for use in routes
         req.tenant = tenant;
-        return next();
       }
     } catch (error) {
-      console.error('Error checking custom domain:', error);
+      console.error('Domain routing error:', error);
     }
   }
   
   next();
 });
 
-// Tenant onboarding endpoint
+// Onboarding endpoint
 app.post('/api/tenants/onboard', async (req, res) => {
   try {
     const {
@@ -133,16 +136,7 @@ app.post('/api/tenants/onboard', async (req, res) => {
       address,
       website
     } = req.body;
-    
-    // Basic validation
-    if (!schoolName || !domain || !adminName || !adminEmail) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing required fields'
-      });
-    }
-    
-    // Call the real tenant service
+
     const result = await onboardTenant({
       schoolName,
       domain,
@@ -180,8 +174,17 @@ app.post('/api/tenants/onboard', async (req, res) => {
 });
 
 // API routes
+app.use('/api/auth', authRoutes);
 app.use('/api/domains', domainRoutes);
 app.use('/api/branding', brandingRoutes);
+app.use('/api/attendance', attendanceRoutes);
+
+// Protected super admin routes
+app.use('/api/super-admin', authenticateToken, superAdminRoutes);
+
+// Tenant-specific routes
+app.use('/api/tenants/:tenantId/attendance', attendanceRoutes);
+app.use('/api/tenants/:tenantId/branding', brandingRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -193,7 +196,8 @@ app.get('/', (req, res) => {
     endpoints: {
       health: '/api/tenants/health',
       domainCheck: '/api/tenants/domain/:domain/check',
-      onboard: '/api/tenants/onboard'
+      onboard: '/api/tenants/onboard',
+      auth: '/api/auth'
     }
   });
 });
