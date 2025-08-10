@@ -77,7 +77,7 @@ school-management-system/
 │   │   │   ├── tenantRoutes.js
 │   │   │   ├── brandingRoutes.js
 │   │   │   └── domainRoutes.js
-│   │   └── server-fixed.js
+│   │   └── server.js
 │   ├── package.json
 │   └── env.example
 ├── PROJECT_STATUS.md        # Current project status

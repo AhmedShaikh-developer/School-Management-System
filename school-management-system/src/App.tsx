@@ -8,6 +8,7 @@ import BrandingCustomization from './components/BrandingCustomization';
 import AttendanceAdmin from './components/AttendanceAdmin';
 import SuperAdminBiometric from './components/SuperAdminBiometric';
 import SuperAdminLogin from './components/SuperAdminLogin';
+import ChangePassword from './components/ChangePassword';
 
 import axios from 'axios';
 import './App.css';
@@ -193,7 +194,7 @@ const TenantLoginPage: React.FC = () => {
     setError('');
 
     try {
-      const response = await fetch('/api/tenant-auth/login', {
+      const response = await fetch('http://localhost:5000/api/tenant-auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -488,6 +489,12 @@ const TenantDashboard: React.FC = () => {
                 Attendance
               </button>
               <button
+                onClick={() => navigate('/change-password')}
+                className="bg-yellow-600 text-white px-4 py-2 rounded-md hover:bg-yellow-700"
+              >
+                Change Password
+              </button>
+              <button
                 onClick={handleLogout}
                 className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
               >
@@ -717,6 +724,7 @@ function App() {
               <Route path="/onboarding" element={<OnboardingPage />} />
               <Route path="/tenant/login" element={<TenantLoginPage />} />
               <Route path="/dashboard" element={<TenantDashboard />} />
+              <Route path="/change-password" element={<ChangePassword />} />
               <Route path="/domain" element={<DomainPage />} />
               <Route path="/branding" element={<BrandingPage />} />
               <Route path="/attendance" element={<AttendancePage />} />

@@ -43,6 +43,11 @@ const initializeMainDatabase = async () => {
         domain VARCHAR(255) UNIQUE NOT NULL,
         admin_email VARCHAR(255) NOT NULL,
         admin_name VARCHAR(255) NOT NULL,
+        phone VARCHAR(20),
+        school_type VARCHAR(50),
+        student_count INTEGER,
+        address TEXT,
+        website VARCHAR(255),
         status VARCHAR(20) DEFAULT 'active',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -176,7 +181,7 @@ const initializeMainDatabase = async () => {
       CREATE TABLE IF NOT EXISTS admin_users (
         id SERIAL PRIMARY KEY,
         tenant_id VARCHAR(50) NOT NULL,
-        email VARCHAR(255) UNIQUE NOT NULL,
+        email VARCHAR(255) NOT NULL,
         password_hash VARCHAR(255) NOT NULL,
         name VARCHAR(255) NOT NULL,
         role VARCHAR(50) DEFAULT 'admin',
@@ -213,7 +218,7 @@ const createTenantDatabase = async (tenantId, schoolName) => {
     await tenantClient.query(`
       CREATE TABLE users (
         id SERIAL PRIMARY KEY,
-        email VARCHAR(255) UNIQUE NOT NULL,
+        email VARCHAR(255) NOT NULL,
         password_hash VARCHAR(255) NOT NULL,
         name VARCHAR(255) NOT NULL,
         role VARCHAR(50) DEFAULT 'user',

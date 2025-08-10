@@ -6,9 +6,7 @@ const {
   checkDomainExists 
 } = require('../config/database');
 const { 
-  sendWelcomeEmail, 
-  sendFailureNotification, 
-  sendAdminNotification 
+  sendWelcomeEmail
 } = require('./emailService');
 
 // Generate unique tenant ID
@@ -28,23 +26,33 @@ const generateTemporaryPassword = () => {
   return password;
 };
 
-// Create admin user in tenant database
+// Create admin user in both tenant database and main database
 const createAdminUser = async (tenantId, adminData, password) => {
   try {
+    // Create admin user in tenant-specific database
     const tenantPool = require('../config/database').createTenantPool(tenantId);
-    const client = await tenantPool.connect();
+    const tenantClient = await tenantPool.connect();
     
     const passwordHash = await bcrypt.hash(password, 12);
     
-    await client.query(`
+    await tenantClient.query(`
       INSERT INTO users (email, password_hash, name, role, status)
       VALUES ($1, $2, $3, $4, $5)
     `, [adminData.email, passwordHash, adminData.name, 'admin', 'active']);
     
-    client.release();
+    tenantClient.release();
     tenantPool.end();
     
-    console.log(`Admin user created for tenant ${tenantId}`);
+    // Also create admin user in main database's admin_users table
+    const mainClient = await mainPool.connect();
+    await mainClient.query(`
+      INSERT INTO admin_users (tenant_id, email, password_hash, name, role, status)
+      VALUES ($1, $2, $3, $4, $5, $6)
+    `, [tenantId, adminData.email, passwordHash, adminData.name, 'admin', 'active']);
+    
+    mainClient.release();
+    
+    console.log(`Admin user created for tenant ${tenantId} in both databases`);
     return true;
   } catch (error) {
     console.error(`Error creating admin user for tenant ${tenantId}:`, error);
@@ -78,9 +86,9 @@ const onboardTenant = async (tenantData) => {
     console.log('Step 3: Creating tenant record...');
     const client = await mainPool.connect();
     await client.query(`
-      INSERT INTO tenants (tenant_id, school_name, domain, admin_email, admin_name, status)
-      VALUES ($1, $2, $3, $4, $5, $6)
-    `, [tenantId, tenantData.schoolName, tenantData.domain, tenantData.adminEmail, tenantData.adminName, 'active']);
+      INSERT INTO tenants (tenant_id, school_name, domain, admin_email, admin_name, phone, school_type, student_count, address, website, status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    `, [tenantId, tenantData.schoolName, tenantData.domain, tenantData.adminEmail, tenantData.adminName, tenantData.phone, tenantData.schoolType, tenantData.studentCount, tenantData.address, tenantData.website, 'active']);
     
     rollbackSteps.push(() => client.query('DELETE FROM tenants WHERE tenant_id = $1', [tenantId]));
     client.release();
@@ -104,25 +112,11 @@ const onboardTenant = async (tenantData) => {
         tenantData.adminEmail,
         tenantData.adminName,
         tenantData.schoolName,
-        tenantData.domain,
         tempPassword
       );
       console.log('Welcome email sent successfully');
     } catch (emailError) {
       console.error('Email sending failed, but continuing with onboarding:', emailError.message);
-      // Don't fail the entire onboarding process due to email issues
-    }
-    
-    // Step 7: Send admin notification (with error handling)
-    console.log('Step 7: Sending admin notification...');
-    try {
-      await sendAdminNotification({
-        ...tenantData,
-        tenantId
-      });
-      console.log('Admin notification sent successfully');
-    } catch (emailError) {
-      console.error('Admin notification failed, but continuing:', emailError.message);
       // Don't fail the entire onboarding process due to email issues
     }
     
@@ -153,19 +147,8 @@ const onboardTenant = async (tenantData) => {
       }
     }
     
-    // Send failure notification (with error handling)
-    try {
-      await sendFailureNotification(
-        tenantData.adminEmail,
-        tenantData.adminName,
-        tenantData.schoolName,
-        error.message
-      );
-      console.log('Failure notification sent successfully');
-    } catch (emailError) {
-      console.error('Failed to send failure notification:', emailError.message);
-      // Don't throw error for email failures during rollback
-    }
+    // Note: Email notifications removed for simplicity
+    console.log('Skipping failure notification email');
     
     const endTime = Date.now();
     const duration = (endTime - startTime) / 1000;

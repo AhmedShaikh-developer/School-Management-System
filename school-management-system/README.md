@@ -115,7 +115,7 @@ school-management-system/
 │   │   │   ├── domainRoutes.js
 │   │   │   ├── attendanceRoutes.js
 │   │   │   └── superAdminRoutes.js
-│   │   └── server-fixed.js
+│   │   └── server.js
 │   ├── package.json
 │   └── env.example
 ├── PROJECT_STATUS.md        # Current project status
