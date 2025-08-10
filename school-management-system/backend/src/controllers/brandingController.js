@@ -153,6 +153,15 @@ const uploadTenantLogo = async (req, res) => {
       });
     }
     
+    // Debug: Log file information
+    console.log('Uploading logo for tenant:', tenantId);
+    console.log('File info:', {
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+      hasBuffer: !!req.file.buffer
+    });
+    
     const result = await uploadLogo(tenantId, req.file);
     
     res.json({

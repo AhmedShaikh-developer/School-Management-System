@@ -136,7 +136,7 @@ const step2ValidationSchema = Yup.object({
 });
 
 interface TenantOnboardingFormProps {
-  onSuccess?: (tenantId: string) => void;
+  onSuccess?: (tenantId: string, domain: string, schoolName: string, adminEmail: string, tempPassword: string) => void;
 }
 
 const TenantOnboardingForm: React.FC<TenantOnboardingFormProps> = ({ onSuccess }) => {
@@ -202,7 +202,15 @@ const TenantOnboardingForm: React.FC<TenantOnboardingFormProps> = ({ onSuccess }
         
         // Call onSuccess callback if provided
         if (onSuccess && response.data.data?.tenantId) {
-          onSuccess(response.data.data.tenantId);
+          // Extract temporary password from response or generate a placeholder
+          const tempPassword = response.data.data.tempPassword || 'Check your email for password';
+          onSuccess(
+            response.data.data.tenantId,
+            values.domain,
+            values.schoolName,
+            values.adminEmail,
+            tempPassword
+          );
         }
       } else {
         toast.error(response.data.message || 'Failed to onboard school');
@@ -453,6 +461,8 @@ const TenantOnboardingForm: React.FC<TenantOnboardingFormProps> = ({ onSuccess }
                         <li>• An admin account will be set up for you</li>
                         <li>• You'll receive login credentials via email</li>
                         <li>• The process typically takes 2-3 minutes</li>
+                        <li>• After setup, you'll access your portal directly</li>
+                        <li>• You'll configure domain and branding in your dashboard</li>
                       </ul>
                     </div>
 

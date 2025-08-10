@@ -3,6 +3,7 @@ import { Formik, Form, Field, ErrorMessage } from 'formik';
 import * as Yup from 'yup';
 import axios from 'axios';
 import { toast } from 'react-toastify';
+import { useTenant } from '../App';
 
 interface BrandingFormData {
   primary_color: string;
@@ -50,6 +51,7 @@ const validationSchema = Yup.object({
 });
 
 const BrandingCustomization: React.FC<{ tenantId: string }> = ({ tenantId }) => {
+  const { refreshBranding, tenantToken } = useTenant();
   const [branding, setBranding] = useState<BrandingData | null>(null);
   const [loading, setLoading] = useState(false);
   const [colorPresets, setColorPresets] = useState<ColorPreset[]>([]);
@@ -75,7 +77,12 @@ const BrandingCustomization: React.FC<{ tenantId: string }> = ({ tenantId }) => 
   const loadBranding = async () => {
     try {
       const response = await axios.get(
-        `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/branding/${tenantId}`
+        `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/branding/${tenantId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${tenantToken}`
+          }
+        }
       );
       if (response.data.success) {
         setBranding(response.data.data);
@@ -126,12 +133,17 @@ const BrandingCustomization: React.FC<{ tenantId: string }> = ({ tenantId }) => 
     try {
       const response = await axios.put(
         `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/branding/${tenantId}`,
-        values
+        values,
+        {
+          headers: {
+            'Authorization': `Bearer ${tenantToken}`
+          }
+        }
       );
 
       if (response.data.success) {
         toast.success('Branding updated successfully!');
-        loadBranding();
+        refreshBranding();
       } else {
         toast.error(response.data.message || 'Failed to update branding');
       }
@@ -158,14 +170,15 @@ const BrandingCustomization: React.FC<{ tenantId: string }> = ({ tenantId }) => 
         formData,
         {
           headers: {
-            'Content-Type': 'multipart/form-data'
+            'Content-Type': 'multipart/form-data',
+            'Authorization': `Bearer ${tenantToken}`
           }
         }
       );
 
       if (response.data.success) {
         toast.success('Logo uploaded successfully!');
-        loadBranding();
+        refreshBranding();
       } else {
         toast.error(response.data.message || 'Failed to upload logo');
       }
@@ -184,12 +197,17 @@ const BrandingCustomization: React.FC<{ tenantId: string }> = ({ tenantId }) => 
 
     try {
       const response = await axios.delete(
-        `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/branding/${tenantId}/logo`
+        `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/branding/${tenantId}/logo`,
+        {
+          headers: {
+            'Authorization': `Bearer ${tenantToken}`
+          }
+        }
       );
 
       if (response.data.success) {
         toast.success('Logo deleted successfully!');
-        loadBranding();
+        refreshBranding();
       } else {
         toast.error(response.data.message || 'Failed to delete logo');
       }

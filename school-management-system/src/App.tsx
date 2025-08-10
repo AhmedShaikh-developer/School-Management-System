@@ -1,5 +1,5 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation, useSearchParams, NavLink } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import TenantOnboardingForm from './components/TenantOnboardingForm';
@@ -9,6 +9,7 @@ import AttendanceAdmin from './components/AttendanceAdmin';
 import SuperAdminBiometric from './components/SuperAdminBiometric';
 import SuperAdminLogin from './components/SuperAdminLogin';
 import ChangePassword from './components/ChangePassword';
+import OnboardingSuccess from './components/OnboardingSuccess';
 
 import axios from 'axios';
 import './App.css';
@@ -25,6 +26,7 @@ interface TenantContextType {
   setTenantInfo: (info: any | null) => void;
   tenantToken: string | null;
   setTenantToken: (token: string | null) => void;
+  refreshBranding: () => void;
 }
 
 const TenantContext = createContext<TenantContextType | undefined>(undefined);
@@ -107,34 +109,14 @@ const TenantNavigation: React.FC<{ tenantId: string }> = ({ tenantId }) => {
   return (
     <div className="flex justify-center space-x-4 mb-8">
       <button
-        onClick={() => navigate(`/domain?tenantId=${tenantId}`)}
+        onClick={() => navigate(`/domain-and-branding?tenantId=${tenantId}`)}
         className={`px-4 py-2 rounded-md transition-colors ${
-          isActive('/domain')
+          isActive('/domain-and-branding')
             ? 'bg-blue-600 text-white'
             : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
         }`}
       >
-        Domain Setup
-      </button>
-      <button
-        onClick={() => navigate(`/branding?tenantId=${tenantId}`)}
-        className={`px-4 py-2 rounded-md transition-colors ${
-          isActive('/branding')
-            ? 'bg-blue-600 text-white'
-            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-        }`}
-      >
-        Branding
-      </button>
-      <button
-        onClick={() => navigate(`/attendance?tenantId=${tenantId}`)}
-        className={`px-4 py-2 rounded-md transition-colors ${
-          isActive('/attendance')
-            ? 'bg-blue-600 text-white'
-            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-        }`}
-      >
-        Attendance
+        Domain & Branding
       </button>
     </div>
   );
@@ -165,15 +147,94 @@ const TenantLayout: React.FC<{ children: React.ReactNode; title: string; descrip
   );
 };
 
+// Attendance Navigation Component (No Domain & Branding button)
+const AttendanceNavigation: React.FC<{ tenantId: string }> = ({ tenantId }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  
+  const isActive = (path: string) => {
+    const currentPath = location.pathname;
+    const currentTenantId = searchParams.get('tenantId');
+    return currentPath === path && currentTenantId === tenantId;
+  };
+  
+  return (
+    <div className="flex justify-center space-x-4 mb-8">
+      <button
+        onClick={() => navigate('/dashboard')}
+        className={`px-4 py-2 rounded-md transition-colors ${
+          isActive('/dashboard')
+            ? 'bg-blue-600 text-white'
+            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+        }`}
+      >
+        Back to Dashboard
+      </button>
+    </div>
+  );
+};
+
+// Attendance Layout Component (Without Domain & Branding navigation)
+const AttendanceLayout: React.FC<{ children: React.ReactNode; title: string; description: string; tenantId: string }> = ({ 
+  children, 
+  title, 
+  description, 
+  tenantId 
+}) => {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8">
+      <div className="max-w-4xl mx-auto px-4">
+        <div className="bg-white rounded-lg shadow-xl p-8">
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">{title}</h1>
+            <p className="text-gray-600">{description}</p>
+          </div>
+          
+          <AttendanceNavigation tenantId={tenantId} />
+          
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Onboarding Page Component
 const OnboardingPage: React.FC = () => {
   const navigate = useNavigate();
   const { setTenantId } = useTenant();
+  const [onboardingData, setOnboardingData] = useState<any>(null);
   
-  const handleOnboardingSuccess = (newTenantId: string) => {
+  const handleOnboardingSuccess = (
+    newTenantId: string, 
+    domain: string, 
+    schoolName: string, 
+    adminEmail: string, 
+    tempPassword: string
+  ) => {
     setTenantId(newTenantId);
-    navigate('/tenant/login');
+    setOnboardingData({
+      tenantId: newTenantId,
+      domain,
+      schoolName,
+      adminEmail,
+      tempPassword
+    });
   };
+  
+  // If onboarding is complete, show success page
+  if (onboardingData) {
+    return (
+      <OnboardingSuccess
+        tenantId={onboardingData.tenantId}
+        domain={onboardingData.domain}
+        schoolName={onboardingData.schoolName}
+        adminEmail={onboardingData.adminEmail}
+        tempPassword={onboardingData.tempPassword}
+      />
+    );
+  }
   
   return <TenantOnboardingForm onSuccess={handleOnboardingSuccess} />;
 };
@@ -368,59 +429,62 @@ const ProtectedTenantPage: React.FC<{
   );
 };
 
-// Domain Setup Page Component
-const DomainPage: React.FC = () => {
-  const { tenantId } = useTenant();
-  
-  if (!tenantId) {
-    return <Navigate to="/tenant/login" replace />;
-  }
-  
-  return (
-    <ProtectedTenantPage 
-      title="Custom Domain Setup" 
-      description="Configure your custom domain"
-      tenantId={tenantId}
-    >
-      <CustomDomainSetup tenantId={tenantId} />
-    </ProtectedTenantPage>
-  );
-};
-
-// Branding Page Component
-const BrandingPage: React.FC = () => {
-  const { tenantId } = useTenant();
-  
-  if (!tenantId) {
-    return <Navigate to="/tenant/login" replace />;
-  }
-  
-  return (
-    <ProtectedTenantPage 
-      title="Branding Customization" 
-      description="Customize your tenant branding"
-      tenantId={tenantId}
-    >
-      <BrandingCustomization tenantId={tenantId} />
-    </ProtectedTenantPage>
-  );
-};
-
 // Attendance Page Component
 const AttendancePage: React.FC = () => {
-  const { tenantId } = useTenant();
+  const { tenantId, isAuthenticated, tenantUser } = useTenant();
   
-  if (!tenantId) {
+  if (!isAuthenticated || !tenantUser || !tenantId) {
     return <Navigate to="/tenant/login" replace />;
   }
   
   return (
+    <AttendanceLayout title="Attendance System" description="Manage student attendance and biometric settings" tenantId={tenantId}>
+      <div className="bg-white rounded-lg shadow p-6">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Attendance System</h2>
+        <p className="text-gray-600">Attendance system configuration will be available here.</p>
+      </div>
+    </AttendanceLayout>
+  );
+};
+
+// Domain and Branding Combined Page Component
+const DomainAndBrandingPage: React.FC = () => {
+  const { tenantId, tenantInfo } = useTenant();
+  
+  if (!tenantId) {
+    return <Navigate to="/tenant/login" replace />;
+  }
+
+  return (
     <ProtectedTenantPage 
-      title="Attendance Management" 
-      description="Manage attendance settings and configurations"
+      title="Domain & Branding Setup" 
+      description="Configure your school's domain and customize branding"
       tenantId={tenantId}
     >
-      <AttendanceAdmin tenantId={tenantId} />
+      <div className="space-y-8">
+        {/* Domain Setup Section */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Domain Configuration</h2>
+          <CustomDomainSetup tenantId={tenantId} />
+        </div>
+
+        {/* Branding Customization Section */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Branding Customization</h2>
+          <BrandingCustomization tenantId={tenantId} />
+        </div>
+
+        {/* Next Steps */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+          <h3 className="text-sm font-medium text-blue-900 mb-2">What's Next?</h3>
+          <ul className="text-sm text-blue-800 space-y-1">
+            <li>• <strong>Complete domain verification</strong> to make your portal accessible</li>
+            <li>• <strong>Customize your branding</strong> to match your school's identity</li>
+            <li>• <strong>Access your dashboard</strong> to set up other modules</li>
+            <li>• <strong>Add teachers and students</strong> to get started with operations</li>
+          </ul>
+        </div>
+      </div>
     </ProtectedTenantPage>
   );
 };
@@ -471,24 +535,6 @@ const TenantDashboard: React.FC = () => {
             <div className="flex items-center space-x-4">
               <span className="text-gray-700">Welcome, {tenantUser.name}</span>
               <button
-                onClick={() => navigate('/domain')}
-                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
-              >
-                Domain Setup
-              </button>
-              <button
-                onClick={() => navigate('/branding')}
-                className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
-              >
-                Branding
-              </button>
-              <button
-                onClick={() => navigate('/attendance')}
-                className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700"
-              >
-                Attendance
-              </button>
-              <button
                 onClick={() => navigate('/change-password')}
                 className="bg-yellow-600 text-white px-4 py-2 rounded-md hover:bg-yellow-700"
               >
@@ -507,6 +553,24 @@ const TenantDashboard: React.FC = () => {
       
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
+          {/* Portal URL Display */}
+          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-medium text-blue-900">Your School Portal</h3>
+                <p className="text-sm text-blue-700 mt-1">
+                  Access your school at: <span className="font-mono font-medium">{tenantInfo.domain}.{window.location.host}</span>
+                </p>
+              </div>
+              <button
+                onClick={() => window.open(`${window.location.protocol}//${tenantInfo.domain}.${window.location.host}`, '_blank')}
+                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm"
+              >
+                Open Portal
+              </button>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-white overflow-hidden shadow rounded-lg">
               <div className="p-5">
@@ -518,9 +582,17 @@ const TenantDashboard: React.FC = () => {
                   </div>
                   <div className="ml-5 w-0 flex-1">
                     <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">Domain Status</dt>
-                      <dd className="text-lg font-medium text-gray-900">Active</dd>
+                      <dt className="text-sm font-medium text-gray-500 truncate">Domain & Branding</dt>
+                      <dd className="text-lg font-medium text-gray-900">Setup Required</dd>
                     </dl>
+                  </div>
+                  <div className="ml-5 flex-shrink-0">
+                    <button
+                      onClick={() => navigate('/domain-and-branding')}
+                      className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+                    >
+                      Configure
+                    </button>
                   </div>
                 </div>
               </div>
@@ -543,7 +615,7 @@ const TenantDashboard: React.FC = () => {
                 </div>
               </div>
             </div>
-            
+
             <div className="bg-white overflow-hidden shadow rounded-lg">
               <div className="p-5">
                 <div className="flex items-center">
@@ -554,9 +626,17 @@ const TenantDashboard: React.FC = () => {
                   </div>
                   <div className="ml-5 w-0 flex-1">
                     <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">Attendance</dt>
-                      <dd className="text-lg font-medium text-gray-900">Ready</dd>
+                      <dt className="text-sm font-medium text-gray-500 truncate">Attendance System</dt>
+                      <dd className="text-lg font-medium text-gray-900">Ready to Setup</dd>
                     </dl>
+                  </div>
+                  <div className="ml-5 flex-shrink-0">
+                    <button
+                      onClick={() => navigate('/attendance')}
+                      className="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700"
+                    >
+                      Configure
+                    </button>
                   </div>
                 </div>
               </div>
@@ -656,19 +736,97 @@ function App() {
     }
   }, []);
 
+  // Load branding for authenticated tenants (including localhost)
+  useEffect(() => {
+    if (tenantId && tenantIsAuthenticated) {
+      loadTenantBrandingById(tenantId);
+    }
+  }, [tenantId, tenantIsAuthenticated]);
+
   const loadTenantBranding = async (domain: string) => {
     try {
       setLoading(true);
       const response = await axios.get(
         `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/branding/css/${domain}`
       );
-      const style = document.createElement('style');
-      style.textContent = response.data;
-      document.head.appendChild(style);
+      applyBrandingCSS(response.data, `branding-${domain}`);
     } catch (error) {
-      console.error('Error loading tenant branding:', error);
+      console.error('Error loading tenant branding by domain:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadTenantBrandingById = async (tenantId: string) => {
+    try {
+      const response = await axios.get(
+        `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/branding/${tenantId}`
+      );
+      if (response.data.success) {
+        const branding = response.data.data;
+        const css = generateBrandingCSS(branding);
+        applyBrandingCSS(css, `branding-${tenantId}`);
+      }
+    } catch (error) {
+      console.error('Error loading tenant branding by ID:', error);
+    }
+  };
+
+  const generateBrandingCSS = (branding: any) => {
+    return `
+      :root {
+        --primary-color: ${branding.primary_color || '#2563eb'};
+        --secondary-color: ${branding.secondary_color || '#1d4ed8'};
+        --accent-color: ${branding.accent_color || '#16a34a'};
+        --font-family: ${branding.font_family || 'Inter'};
+      }
+      
+      body {
+        font-family: var(--font-family), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+      
+      .bg-primary { background-color: var(--primary-color) !important; }
+      .bg-secondary { background-color: var(--secondary-color) !important; }
+      .bg-accent { background-color: var(--accent-color) !important; }
+      
+      .text-primary { color: var(--primary-color) !important; }
+      .text-secondary { color: var(--secondary-color) !important; }
+      .text-accent { color: var(--accent-color) !important; }
+      
+      .border-primary { border-color: var(--primary-color) !important; }
+      .border-secondary { border-color: var(--secondary-color) !important; }
+      .border-accent { border-color: var(--accent-color) !important; }
+      
+      .focus\\:ring-primary:focus { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.5) !important; }
+      .focus\\:ring-secondary:focus { box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.5) !important; }
+      .focus\\:ring-accent:focus { box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.5) !important; }
+      
+      .hover\\:bg-primary:hover { background-color: var(--secondary-color) !important; }
+      .hover\\:bg-secondary:hover { background-color: var(--primary-color) !important; }
+      .hover\\:bg-accent:hover { background-color: var(--accent-color) !important; }
+      
+      ${branding.custom_css || ''}
+    `;
+  };
+
+  const applyBrandingCSS = (css: string, id: string) => {
+    // Remove existing branding stylesheet
+    const existingStyle = document.getElementById(id);
+    if (existingStyle) {
+      existingStyle.remove();
+    }
+    
+    // Create new stylesheet
+    const style = document.createElement('style');
+    style.id = id;
+    style.textContent = css;
+    document.head.appendChild(style);
+  };
+
+  // Function to refresh branding (can be called from other components)
+  const refreshBranding = () => {
+    if (tenantId && tenantIsAuthenticated) {
+      loadTenantBrandingById(tenantId);
     }
   };
 
@@ -708,7 +866,8 @@ function App() {
       tenantInfo,
       setTenantInfo,
       tenantToken,
-      setTenantToken
+      setTenantToken,
+      refreshBranding
     }}>
       <SuperAdminContext.Provider value={{
         isAuthenticated,
@@ -725,8 +884,7 @@ function App() {
               <Route path="/tenant/login" element={<TenantLoginPage />} />
               <Route path="/dashboard" element={<TenantDashboard />} />
               <Route path="/change-password" element={<ChangePassword />} />
-              <Route path="/domain" element={<DomainPage />} />
-              <Route path="/branding" element={<BrandingPage />} />
+              <Route path="/domain-and-branding" element={<DomainAndBrandingPage />} />
               <Route path="/attendance" element={<AttendancePage />} />
               <Route path="/super-admin/login" element={<SuperAdminLoginPage />} />
               <Route path="/super-admin/dashboard" element={<SuperAdminDashboard />} />

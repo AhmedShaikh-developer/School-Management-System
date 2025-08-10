@@ -199,6 +199,10 @@ const uploadLogo = async (tenantId, file) => {
       throw new Error('No file uploaded');
     }
     
+    if (!file.buffer) {
+      throw new Error('File buffer is missing');
+    }
+    
     // Get existing branding to preserve other fields
     const existingBranding = await getTenantBranding(tenantId);
     
