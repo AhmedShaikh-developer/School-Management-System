@@ -13,7 +13,10 @@ const brandingRoutes = require('./routes/brandingRoutes');
 const attendanceRoutes = require('./routes/attendanceRoutes');
 const superAdminRoutes = require('./routes/superAdminRoutes');
 const authRoutes = require('./routes/authRoutes');
+const tenantAuthRoutes = require('./routes/tenantAuthRoutes');
+const tenantRoutes = require('./routes/tenantRoutes');
 const { authenticateToken } = require('./middleware/auth');
+const { authenticateTenant } = require('./middleware/tenantAuth');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -175,16 +178,18 @@ app.post('/api/tenants/onboard', async (req, res) => {
 
 // API routes
 app.use('/api/auth', authRoutes);
+app.use('/api/tenant-auth', tenantAuthRoutes);
+
+// Public routes (no authentication required)
+app.use('/api/tenants', tenantRoutes);
 app.use('/api/domains', domainRoutes);
-app.use('/api/branding', brandingRoutes);
-app.use('/api/attendance', attendanceRoutes);
+
+// Protected tenant-specific routes (require tenant authentication)
+app.use('/api/branding', authenticateTenant, brandingRoutes);
+app.use('/api/attendance', authenticateTenant, attendanceRoutes);
 
 // Protected super admin routes
 app.use('/api/super-admin', authenticateToken, superAdminRoutes);
-
-// Tenant-specific routes
-app.use('/api/tenants/:tenantId/attendance', attendanceRoutes);
-app.use('/api/tenants/:tenantId/branding', brandingRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -197,7 +202,8 @@ app.get('/', (req, res) => {
       health: '/api/tenants/health',
       domainCheck: '/api/tenants/domain/:domain/check',
       onboard: '/api/tenants/onboard',
-      auth: '/api/auth'
+      auth: '/api/auth',
+      tenantAuth: '/api/tenant-auth'
     }
   });
 });

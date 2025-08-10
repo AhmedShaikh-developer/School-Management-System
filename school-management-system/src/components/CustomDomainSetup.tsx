@@ -27,6 +27,21 @@ const validationSchema = Yup.object({
     .required('Verification type is required')
 });
 
+// Utility function to get authenticated axios instance for tenant
+const getTenantAuthenticatedAxios = (tenantId: string) => {
+  const token = localStorage.getItem(`tenantToken_${tenantId}`);
+  const instance = axios.create({
+    baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5000',
+    timeout: 30000,
+  });
+
+  if (token) {
+    instance.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+  }
+
+  return instance;
+};
+
 const CustomDomainSetup: React.FC<{ tenantId: string }> = ({ tenantId }) => {
   const [domains, setDomains] = useState<DomainInfo[]>([]);
   const [loading, setLoading] = useState(false);
@@ -44,28 +59,32 @@ const CustomDomainSetup: React.FC<{ tenantId: string }> = ({ tenantId }) => {
 
   const loadDomains = async () => {
     try {
-      const response = await axios.get(
-        `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/domains/tenant/${tenantId}`
-      );
+      const axiosInstance = getTenantAuthenticatedAxios(tenantId);
+      const response = await axiosInstance.get(`/api/domains/tenant/${tenantId}`);
       if (response.data.success) {
         setDomains(response.data.data.domains);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading domains:', error);
+      if (error.response?.status === 401) {
+        toast.error('Authentication expired. Please login again.');
+        localStorage.removeItem(`tenantToken_${tenantId}`);
+        localStorage.removeItem(`tenantUser_${tenantId}`);
+        localStorage.removeItem(`tenantInfo_${tenantId}`);
+        window.location.href = `/tenant/login?tenantId=${tenantId}`;
+      }
     }
   };
 
   const handleSubmit = async (values: CustomDomainFormData, { setSubmitting, resetForm }: any) => {
     setLoading(true);
     try {
-      const response = await axios.post(
-        `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/domains/add`,
-        {
-          tenantId,
-          domain: values.domain,
-          verificationType: values.verificationType
-        }
-      );
+      const axiosInstance = getTenantAuthenticatedAxios(tenantId);
+      const response = await axiosInstance.post('/api/domains/add', {
+        tenantId,
+        domain: values.domain,
+        verificationType: values.verificationType
+      });
 
       if (response.data.success) {
         toast.success('Domain added successfully!');
@@ -76,7 +95,15 @@ const CustomDomainSetup: React.FC<{ tenantId: string }> = ({ tenantId }) => {
       }
     } catch (error: any) {
       console.error('Error adding domain:', error);
-      toast.error(error.response?.data?.message || 'Failed to add domain');
+      if (error.response?.status === 401) {
+        toast.error('Authentication expired. Please login again.');
+        localStorage.removeItem(`tenantToken_${tenantId}`);
+        localStorage.removeItem(`tenantUser_${tenantId}`);
+        localStorage.removeItem(`tenantInfo_${tenantId}`);
+        window.location.href = `/tenant/login?tenantId=${tenantId}`;
+      } else {
+        toast.error(error.response?.data?.message || 'Failed to add domain');
+      }
     } finally {
       setLoading(false);
       setSubmitting(false);
@@ -86,9 +113,8 @@ const CustomDomainSetup: React.FC<{ tenantId: string }> = ({ tenantId }) => {
   const handleVerify = async (domain: string) => {
     setVerifying(domain);
     try {
-      const response = await axios.post(
-        `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/domains/verify/${domain}`
-      );
+      const axiosInstance = getTenantAuthenticatedAxios(tenantId);
+      const response = await axiosInstance.post(`/api/domains/verify/${domain}`);
 
       if (response.data.success) {
         if (response.data.data.verified) {
@@ -102,7 +128,15 @@ const CustomDomainSetup: React.FC<{ tenantId: string }> = ({ tenantId }) => {
       }
     } catch (error: any) {
       console.error('Error verifying domain:', error);
-      toast.error(error.response?.data?.message || 'Failed to verify domain');
+      if (error.response?.status === 401) {
+        toast.error('Authentication expired. Please login again.');
+        localStorage.removeItem(`tenantToken_${tenantId}`);
+        localStorage.removeItem(`tenantUser_${tenantId}`);
+        localStorage.removeItem(`tenantInfo_${tenantId}`);
+        window.location.href = `/tenant/login?tenantId=${tenantId}`;
+      } else {
+        toast.error('Failed to verify domain');
+      }
     } finally {
       setVerifying(null);
     }
@@ -114,12 +148,10 @@ const CustomDomainSetup: React.FC<{ tenantId: string }> = ({ tenantId }) => {
     }
 
     try {
-      const response = await axios.delete(
-        `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/domains/${domain}`,
-        {
-          data: { tenantId }
-        }
-      );
+      const axiosInstance = getTenantAuthenticatedAxios(tenantId);
+      const response = await axiosInstance.delete(`/api/domains/${domain}`, {
+        data: { tenantId }
+      });
 
       if (response.data.success) {
         toast.success('Domain deleted successfully!');
@@ -129,7 +161,15 @@ const CustomDomainSetup: React.FC<{ tenantId: string }> = ({ tenantId }) => {
       }
     } catch (error: any) {
       console.error('Error deleting domain:', error);
-      toast.error(error.response?.data?.message || 'Failed to delete domain');
+      if (error.response?.status === 401) {
+        toast.error('Authentication expired. Please login again.');
+        localStorage.removeItem(`tenantToken_${tenantId}`);
+        localStorage.removeItem(`tenantUser_${tenantId}`);
+        localStorage.removeItem(`tenantInfo_${tenantId}`);
+        window.location.href = `/tenant/login?tenantId=${tenantId}`;
+      } else {
+        toast.error(error.response?.data?.message || 'Failed to delete domain');
+      }
     }
   };
 

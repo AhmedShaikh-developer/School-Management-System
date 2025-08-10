@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect, createContext, useContext } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -8,14 +8,33 @@ import BrandingCustomization from './components/BrandingCustomization';
 import AttendanceAdmin from './components/AttendanceAdmin';
 import SuperAdminBiometric from './components/SuperAdminBiometric';
 import SuperAdminLogin from './components/SuperAdminLogin';
+
 import axios from 'axios';
 import './App.css';
 
-// Context for managing tenant state across routes
+// Context for tenant information
 interface TenantContextType {
   tenantId: string | null;
   setTenantId: (id: string | null) => void;
+  isAuthenticated: boolean;
+  setIsAuthenticated: (auth: boolean) => void;
+  tenantUser: any | null;
+  setTenantUser: (user: any | null) => void;
+  tenantInfo: any | null;
+  setTenantInfo: (info: any | null) => void;
+  tenantToken: string | null;
+  setTenantToken: (token: string | null) => void;
 }
+
+const TenantContext = createContext<TenantContextType | undefined>(undefined);
+
+export const useTenant = () => {
+  const context = useContext(TenantContext);
+  if (context === undefined) {
+    throw new Error('useTenant must be used within a TenantProvider');
+  }
+  return context;
+};
 
 // Context for managing super admin authentication
 interface SuperAdminContextType {
@@ -26,12 +45,7 @@ interface SuperAdminContextType {
   logout: () => void;
 }
 
-const TenantContext = React.createContext<TenantContextType>({
-  tenantId: null,
-  setTenantId: () => {},
-});
-
-const SuperAdminContext = React.createContext<SuperAdminContextType>({
+const SuperAdminContext = createContext<SuperAdminContextType>({
   isAuthenticated: false,
   user: null,
   token: null,
@@ -61,9 +75,15 @@ const HomePage: React.FC = () => {
           </button>
           <button
             onClick={() => navigate('/super-admin/login')}
-            className="w-full md:w-auto px-8 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+            className="w-full md:w-auto px-8 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors mr-4"
           >
             Super Admin Portal
+          </button>
+          <button
+            onClick={() => navigate('/tenant/login')}
+            className="w-full md:w-auto px-8 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+          >
+            School Login
           </button>
         </div>
       </div>
@@ -147,73 +167,260 @@ const TenantLayout: React.FC<{ children: React.ReactNode; title: string; descrip
 // Onboarding Page Component
 const OnboardingPage: React.FC = () => {
   const navigate = useNavigate();
-  const { setTenantId } = React.useContext(TenantContext);
+  const { setTenantId } = useTenant();
   
   const handleOnboardingSuccess = (newTenantId: string) => {
     setTenantId(newTenantId);
-    navigate(`/domain?tenantId=${newTenantId}`);
+    navigate('/tenant/login');
   };
   
   return <TenantOnboardingForm onSuccess={handleOnboardingSuccess} />;
 };
 
-// Domain Setup Page Component
-const DomainPage: React.FC = () => {
-  const [searchParams] = useSearchParams();
-  const tenantId = searchParams.get('tenantId');
+// Tenant Login Page Component
+const TenantLoginPage: React.FC = () => {
+  const [domain, setDomain] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const { setTenantId, setIsAuthenticated, setTenantUser, setTenantInfo, setTenantToken } = useTenant();
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch('/api/tenant-auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ domain, email, password }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Store authentication data
+        setTenantId(data.data.tenant.tenant_id);
+        setTenantUser(data.data.user);
+        setTenantInfo(data.data.tenant);
+        setTenantToken(data.data.token);
+        setIsAuthenticated(true);
+        
+        // Store in localStorage for persistence
+        localStorage.setItem('tenantToken', data.data.token);
+        localStorage.setItem('tenantId', data.data.tenant.tenant_id);
+        localStorage.setItem('tenantUser', JSON.stringify(data.data.user));
+        localStorage.setItem('tenantInfo', JSON.stringify(data.data.tenant));
+        
+        // Navigate to dashboard
+        navigate('/dashboard');
+      } else {
+        setError(data.message || 'Login failed');
+      }
+    } catch (err) {
+      setError('Network error. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+      <div className="sm:mx-auto sm:w-full sm:max-w-md">
+        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+          Sign in to your school
+        </h2>
+        <p className="mt-2 text-center text-sm text-gray-600">
+          Enter your school domain and credentials
+        </p>
+      </div>
+
+      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+          <form className="space-y-6" onSubmit={handleSubmit}>
+            <div>
+              <label htmlFor="domain" className="block text-sm font-medium text-gray-700">
+                School Domain
+              </label>
+              <div className="mt-1">
+                <input
+                  id="domain"
+                  name="domain"
+                  type="text"
+                  required
+                  value={domain}
+                  onChange={(e) => setDomain(e.target.value)}
+                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                  placeholder="your-school"
+                />
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                Enter your school's domain (e.g., your-school)
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                Email address
+              </label>
+              <div className="mt-1">
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                  placeholder="admin@school.com"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                Password
+              </label>
+              <div className="mt-1">
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                  placeholder="••••••••"
+                />
+              </div>
+            </div>
+
+            {error && (
+              <div className="text-red-600 text-sm text-center">
+                {error}
+              </div>
+            )}
+
+            <div>
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoading ? 'Signing in...' : 'Sign in'}
+              </button>
+            </div>
+          </form>
+
+          <div className="mt-6">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-white text-gray-500">
+                  New to the platform?
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <a
+                href="/onboard"
+                className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              >
+                Onboard your school
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Protected Tenant Page Component
+const ProtectedTenantPage: React.FC<{ 
+  children: React.ReactNode; 
+  title: string; 
+  description: string; 
+  tenantId: string;
+}> = ({ children, title, description, tenantId }) => {
+  const { isAuthenticated, tenantUser } = useTenant();
+  const navigate = useNavigate();
   
-  if (!tenantId) {
-    return <Navigate to="/onboarding" replace />;
+  if (!isAuthenticated || !tenantUser) {
+    return <Navigate to="/tenant/login" replace />;
   }
   
   return (
-    <TenantLayout 
+    <TenantLayout title={title} description={description} tenantId={tenantId}>
+      {children}
+    </TenantLayout>
+  );
+};
+
+// Domain Setup Page Component
+const DomainPage: React.FC = () => {
+  const { tenantId } = useTenant();
+  
+  if (!tenantId) {
+    return <Navigate to="/tenant/login" replace />;
+  }
+  
+  return (
+    <ProtectedTenantPage 
       title="Custom Domain Setup" 
       description="Configure your custom domain"
       tenantId={tenantId}
     >
       <CustomDomainSetup tenantId={tenantId} />
-    </TenantLayout>
+    </ProtectedTenantPage>
   );
 };
 
 // Branding Page Component
 const BrandingPage: React.FC = () => {
-  const [searchParams] = useSearchParams();
-  const tenantId = searchParams.get('tenantId');
+  const { tenantId } = useTenant();
   
   if (!tenantId) {
-    return <Navigate to="/onboarding" replace />;
+    return <Navigate to="/tenant/login" replace />;
   }
   
   return (
-    <TenantLayout 
+    <ProtectedTenantPage 
       title="Branding Customization" 
       description="Customize your tenant branding"
       tenantId={tenantId}
     >
       <BrandingCustomization tenantId={tenantId} />
-    </TenantLayout>
+    </ProtectedTenantPage>
   );
 };
 
 // Attendance Page Component
 const AttendancePage: React.FC = () => {
-  const [searchParams] = useSearchParams();
-  const tenantId = searchParams.get('tenantId');
+  const { tenantId } = useTenant();
   
   if (!tenantId) {
-    return <Navigate to="/onboarding" replace />;
+    return <Navigate to="/tenant/login" replace />;
   }
   
   return (
-    <TenantLayout 
+    <ProtectedTenantPage 
       title="Attendance Management" 
       description="Manage attendance settings and configurations"
       tenantId={tenantId}
     >
       <AttendanceAdmin tenantId={tenantId} />
-    </TenantLayout>
+    </ProtectedTenantPage>
   );
 };
 
@@ -228,6 +435,130 @@ const SuperAdminLoginPage: React.FC = () => {
   };
   
   return <SuperAdminLogin onLoginSuccess={handleLoginSuccess} />;
+};
+
+// Tenant Dashboard Component
+const TenantDashboard: React.FC = () => {
+  const { tenantInfo, tenantUser, setIsAuthenticated, setTenantId, setTenantUser, setTenantInfo, setTenantToken } = useTenant();
+  const navigate = useNavigate();
+  
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setTenantId(null);
+    setTenantUser(null);
+    setTenantInfo(null);
+    setTenantToken(null);
+    localStorage.removeItem('tenantToken');
+    localStorage.removeItem('tenantId');
+    localStorage.removeItem('tenantUser');
+    localStorage.removeItem('tenantInfo');
+    navigate('/tenant/login');
+  };
+  
+  if (!tenantInfo || !tenantUser) {
+    return <Navigate to="/tenant/login" replace />;
+  }
+  
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <nav className="bg-white shadow">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex items-center">
+              <h1 className="text-xl font-semibold text-gray-900">{tenantInfo.school_name} Dashboard</h1>
+            </div>
+            <div className="flex items-center space-x-4">
+              <span className="text-gray-700">Welcome, {tenantUser.name}</span>
+              <button
+                onClick={() => navigate('/domain')}
+                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+              >
+                Domain Setup
+              </button>
+              <button
+                onClick={() => navigate('/branding')}
+                className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
+              >
+                Branding
+              </button>
+              <button
+                onClick={() => navigate('/attendance')}
+                className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700"
+              >
+                Attendance
+              </button>
+              <button
+                onClick={handleLogout}
+                className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      </nav>
+      
+      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div className="px-4 py-6 sm:px-0">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-white overflow-hidden shadow rounded-lg">
+              <div className="p-5">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 bg-blue-500 rounded-md flex items-center justify-center">
+                      <span className="text-white font-bold">D</span>
+                    </div>
+                  </div>
+                  <div className="ml-5 w-0 flex-1">
+                    <dl>
+                      <dt className="text-sm font-medium text-gray-500 truncate">Domain Status</dt>
+                      <dd className="text-lg font-medium text-gray-900">Active</dd>
+                    </dl>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-white overflow-hidden shadow rounded-lg">
+              <div className="p-5">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 bg-green-500 rounded-md flex items-center justify-center">
+                      <span className="text-white font-bold">B</span>
+                    </div>
+                  </div>
+                  <div className="ml-5 w-0 flex-1">
+                    <dl>
+                      <dt className="text-sm font-medium text-gray-500 truncate">Branding</dt>
+                      <dd className="text-lg font-medium text-gray-900">Configured</dd>
+                    </dl>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-white overflow-hidden shadow rounded-lg">
+              <div className="p-5">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 bg-purple-500 rounded-md flex items-center justify-center">
+                      <span className="text-white font-bold">A</span>
+                    </div>
+                  </div>
+                  <div className="ml-5 w-0 flex-1">
+                    <dl>
+                      <dt className="text-sm font-medium text-gray-500 truncate">Attendance</dt>
+                      <dd className="text-lg font-medium text-gray-900">Ready</dd>
+                    </dl>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 // Protected Super Admin Dashboard Component
@@ -275,6 +606,10 @@ const SuperAdminDashboard: React.FC = () => {
 // Main App Component
 function App() {
   const [tenantId, setTenantId] = useState<string | null>(null);
+  const [tenantIsAuthenticated, setTenantIsAuthenticated] = useState(false);
+  const [tenantUser, setTenantUser] = useState<any>(null);
+  const [tenantInfo, setTenantInfo] = useState<any>(null);
+  const [tenantToken, setTenantToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState<any>(null);
@@ -289,6 +624,20 @@ function App() {
       setToken(storedToken);
       setUser(JSON.parse(storedUser));
       setIsAuthenticated(true);
+    }
+
+    // Check for existing tenant authentication
+    const storedTenantToken = localStorage.getItem('tenantToken');
+    const storedTenantId = localStorage.getItem('tenantId');
+    const storedTenantUser = localStorage.getItem('tenantUser');
+    const storedTenantInfo = localStorage.getItem('tenantInfo');
+    
+    if (storedTenantToken && storedTenantId && storedTenantUser && storedTenantInfo) {
+      setTenantToken(storedTenantToken);
+      setTenantId(storedTenantId);
+      setTenantUser(JSON.parse(storedTenantUser));
+      setTenantInfo(JSON.parse(storedTenantInfo));
+      setTenantIsAuthenticated(true);
     }
   }, []);
 
@@ -342,7 +691,18 @@ function App() {
   }
 
   return (
-    <TenantContext.Provider value={{ tenantId, setTenantId }}>
+    <TenantContext.Provider value={{ 
+      tenantId, 
+      setTenantId, 
+      isAuthenticated: tenantIsAuthenticated, 
+      setIsAuthenticated: setTenantIsAuthenticated,
+      tenantUser,
+      setTenantUser,
+      tenantInfo,
+      setTenantInfo,
+      tenantToken,
+      setTenantToken
+    }}>
       <SuperAdminContext.Provider value={{
         isAuthenticated,
         user,
@@ -355,6 +715,8 @@ function App() {
             <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/onboarding" element={<OnboardingPage />} />
+              <Route path="/tenant/login" element={<TenantLoginPage />} />
+              <Route path="/dashboard" element={<TenantDashboard />} />
               <Route path="/domain" element={<DomainPage />} />
               <Route path="/branding" element={<BrandingPage />} />
               <Route path="/attendance" element={<AttendancePage />} />
