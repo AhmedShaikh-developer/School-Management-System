@@ -14,7 +14,9 @@ const {
   updateBiometricDevice,
   deleteBiometricDevice,
   getSMSAlerts,
-  resendFailedSMSAlerts
+  resendFailedSMSAlerts,
+  getTenantAttendanceSettings,
+  updateTenantAttendanceSettings
 } = require('../controllers/attendanceController');
 
 // Attendance configuration routes
@@ -44,5 +46,9 @@ router.delete('/devices/:tenantId/:deviceId', deleteBiometricDevice);
 // SMS alert routes
 router.get('/sms/:tenantId', getSMSAlerts);
 router.post('/sms/resend/:tenantId', resendFailedSMSAlerts);
+
+// Tenant attendance settings routes
+router.get('/settings/:tenantId', getTenantAttendanceSettings);
+router.put('/settings/:tenantId', updateTenantAttendanceSettings);
 
 module.exports = router;

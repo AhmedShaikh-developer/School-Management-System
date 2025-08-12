@@ -92,6 +92,140 @@ const generateQRCode = async (req, res) => {
   }
 };
 
+// Get tenant attendance settings
+const getTenantAttendanceSettings = async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+    
+    // Get tenant-specific database connection
+    const { createTenantPool } = require('../config/database');
+    const tenantPool = createTenantPool(tenantId);
+    const tenantClient = await tenantPool.connect();
+
+    try {
+      // Get attendance configuration
+      const configResult = await tenantClient.query(`
+        SELECT * FROM attendance_config ORDER BY id DESC LIMIT 1
+      `);
+      
+      // Get classes for selection
+      const classesResult = await tenantClient.query(`
+        SELECT id, class_name, grade_level FROM classes WHERE status = 'active' ORDER BY class_name
+      `);
+
+      // Get biometric settings from main database
+      const mainPool = require('../config/database').mainPool;
+      const mainClient = await mainPool.connect();
+      const biometricResult = await mainClient.query(`
+        SELECT biometric_enabled, device_configuration, allowed_devices, max_devices
+        FROM tenant_biometric_settings WHERE tenant_id = $1
+      `, [tenantId]);
+      mainClient.release();
+
+      const settings = {
+        attendance_policies: {
+          grace_time_minutes: configResult.rows[0]?.grace_time_minutes || 15,
+          cut_off_time_minutes: configResult.rows[0]?.cut_off_time_minutes || 30,
+          late_rules: configResult.rows[0]?.late_rules || 'standard'
+        },
+        mode_selection: {
+          manual: true,
+          qr: true,
+          biometric: biometricResult.rows[0]?.biometric_enabled || false
+        },
+        class_selection: classesResult.rows.map(c => ({
+          id: c.id,
+          name: c.class_name,
+          grade: c.grade_level
+        })),
+        sms_alerts: {
+          enabled: configResult.rows[0]?.sms_alerts_enabled || false,
+          alert_types: configResult.rows[0]?.alert_types || ['late', 'absent'],
+          time: configResult.rows[0]?.alert_time || '09:00'
+        },
+        device_config: {
+          enabled: biometricResult.rows[0]?.biometric_enabled || false,
+          configuration: biometricResult.rows[0]?.device_configuration || {},
+          allowed_devices: biometricResult.rows[0]?.allowed_devices || [],
+          max_devices: biometricResult.rows[0]?.max_devices || 5
+        }
+      };
+
+      res.json({
+        success: true,
+        data: settings
+      });
+
+    } finally {
+      tenantClient.release();
+      tenantPool.end();
+    }
+
+  } catch (error) {
+    console.error('Error getting tenant attendance settings:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error getting attendance settings'
+    });
+  }
+};
+
+// Update tenant attendance settings
+const updateTenantAttendanceSettings = async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+    const settings = req.body;
+    
+    // Get tenant-specific database connection
+    const { createTenantPool } = require('../config/database');
+    const tenantPool = createTenantPool(tenantId);
+    const tenantClient = await tenantPool.connect();
+
+    try {
+      // Update or create attendance configuration
+      const configResult = await tenantClient.query(`
+        INSERT INTO attendance_config (
+          attendance_mode, grace_time_minutes, cut_off_time_minutes, 
+          sms_alerts_enabled, offline_mode_enabled, conflict_resolution
+        ) VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (id) DO UPDATE SET
+          attendance_mode = EXCLUDED.attendance_mode,
+          grace_time_minutes = EXCLUDED.grace_time_minutes,
+          cut_off_time_minutes = EXCLUDED.cut_off_time_minutes,
+          sms_alerts_enabled = EXCLUDED.sms_alerts_enabled,
+          offline_mode_enabled = EXCLUDED.offline_mode_enabled,
+          conflict_resolution = EXCLUDED.cut_off_time_minutes,
+          updated_at = CURRENT_TIMESTAMP
+        RETURNING *
+      `, [
+        settings.mode_selection.manual ? 'manual' : (settings.mode_selection.qr ? 'qr' : 'biometric'),
+        settings.attendance_policies.grace_time_minutes,
+        settings.attendance_policies.cut_off_time_minutes,
+        settings.sms_alerts.enabled,
+        false, // offline_mode_enabled
+        'latest' // conflict_resolution
+      ]);
+
+      res.json({
+        success: true,
+        data: configResult.rows[0],
+        message: 'Attendance settings updated successfully'
+      });
+
+    } finally {
+      tenantClient.release();
+      tenantPool.end();
+    }
+
+  } catch (error) {
+    console.error('Error updating tenant attendance settings:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating attendance settings'
+    });
+  }
+};
+
 // Validate QR code for attendance
 const validateQRCode = async (req, res) => {
   try {
@@ -432,5 +566,7 @@ module.exports = {
   updateBiometricDevice,
   deleteBiometricDevice,
   getSMSAlerts,
-  resendFailedSMSAlerts
+  resendFailedSMSAlerts,
+  getTenantAttendanceSettings,
+  updateTenantAttendanceSettings
 };

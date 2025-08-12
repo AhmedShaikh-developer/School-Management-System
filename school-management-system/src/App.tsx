@@ -431,17 +431,355 @@ const ProtectedTenantPage: React.FC<{
 
 // Attendance Page Component
 const AttendancePage: React.FC = () => {
-  const { tenantId, isAuthenticated, tenantUser } = useTenant();
+  const { tenantId, isAuthenticated, tenantUser, tenantToken } = useTenant();
+  const [settings, setSettings] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  
+  // Fetch attendance settings on component mount
+  useEffect(() => {
+    const fetchSettings = async () => {
+      if (!tenantId) return;
+      
+      try {
+        const response = await fetch(`http://localhost:5000/api/attendance/settings/${tenantId}`, {
+          headers: {
+            'Authorization': `Bearer ${tenantToken}`
+          }
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+          setSettings(data.data);
+        }
+      } catch (error) {
+        console.error('Error fetching attendance settings:', error);
+        setError('Failed to load attendance settings');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSettings();
+  }, [tenantId, tenantToken]);
+
+  const handleSave = async () => {
+    if (!tenantId || !settings) return;
+    
+    setSaving(true);
+    setMessage('');
+    setError('');
+    
+    try {
+      const response = await fetch(`http://localhost:5000/api/attendance/settings/${tenantId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${tenantToken}`
+        },
+        body: JSON.stringify(settings)
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setMessage('Attendance settings saved successfully!');
+      } else {
+        setError(data.message || 'Failed to save settings');
+      }
+    } catch (err) {
+      setError('Network error. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateSetting = (path: string, value: any) => {
+    setSettings((prev: any) => {
+      const newSettings = { ...prev };
+      const keys = path.split('.');
+      let current = newSettings;
+      
+      for (let i = 0; i < keys.length - 1; i++) {
+        current = current[keys[i]];
+      }
+      
+      current[keys[keys.length - 1]] = value;
+      return newSettings;
+    });
+  };
   
   if (!isAuthenticated || !tenantUser || !tenantId) {
     return <Navigate to="/tenant/login" replace />;
   }
+
+  if (loading) {
+    return (
+      <AttendanceLayout title="Attendance System" description="Manage student attendance and biometric settings" tenantId={tenantId}>
+        <div className="flex items-center justify-center p-12">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading attendance settings...</p>
+          </div>
+        </div>
+      </AttendanceLayout>
+    );
+  }
   
   return (
     <AttendanceLayout title="Attendance System" description="Manage student attendance and biometric settings" tenantId={tenantId}>
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Attendance System</h2>
-        <p className="text-gray-600">Attendance system configuration will be available here.</p>
+      <div className="space-y-6">
+        {message && (
+          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded">
+            {message}
+          </div>
+        )}
+        
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+            {error}
+          </div>
+        )}
+
+        {/* Attendance Policies */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Attendance Policies</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Grace Time (minutes)
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="60"
+                value={settings?.attendance_policies?.grace_time_minutes || 15}
+                onChange={(e) => updateSetting('attendance_policies.grace_time_minutes', parseInt(e.target.value))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Cut-off Time (minutes)
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="120"
+                value={settings?.attendance_policies?.cut_off_time_minutes || 30}
+                onChange={(e) => updateSetting('attendance_policies.cut_off_time_minutes', parseInt(e.target.value))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Late Rules
+              </label>
+              <select
+                value={settings?.attendance_policies?.late_rules || 'standard'}
+                onChange={(e) => updateSetting('attendance_policies.late_rules', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="standard">Standard</option>
+                <option value="strict">Strict</option>
+                <option value="flexible">Flexible</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Mode Selection */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Attendance Mode Selection</h3>
+          <div className="space-y-4">
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="manual-mode"
+                checked={settings?.mode_selection?.manual || false}
+                onChange={(e) => updateSetting('mode_selection.manual', e.target.checked)}
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              />
+              <label htmlFor="manual-mode" className="ml-2 text-sm font-medium text-gray-700">
+                Manual Attendance
+              </label>
+            </div>
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="qr-mode"
+                checked={settings?.mode_selection?.qr || false}
+                onChange={(e) => updateSetting('mode_selection.qr', e.target.checked)}
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              />
+              <label htmlFor="qr-mode" className="ml-2 text-sm font-medium text-gray-700">
+                QR Code Attendance
+              </label>
+            </div>
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="biometric-mode"
+                checked={settings?.mode_selection?.biometric || false}
+                onChange={(e) => updateSetting('mode_selection.biometric', e.target.checked)}
+                disabled={!settings?.device_config?.enabled}
+                className={`h-4 w-4 focus:ring-blue-500 border-gray-300 rounded ${
+                  settings?.device_config?.enabled ? 'text-blue-600' : 'text-gray-400'
+                }`}
+              />
+              <label htmlFor="biometric-mode" className={`ml-2 text-sm font-medium ${
+                settings?.device_config?.enabled ? 'text-gray-700' : 'text-gray-400'
+              }`}>
+                Biometric Attendance
+              </label>
+              {!settings?.device_config?.enabled && (
+                <div className="ml-2 relative group">
+                  <svg className="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                    Biometric attendance is not available for your school. Contact your platform admin to enable it.
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Class Selection */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Class Selection</h3>
+          {settings?.class_selection && settings.class_selection.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {settings.class_selection.map((cls: any) => (
+                <div key={cls.id} className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id={`class-${cls.id}`}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor={`class-${cls.id}`} className="ml-2 text-sm font-medium text-gray-700">
+                    {cls.name} ({cls.grade})
+                  </label>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-gray-500 text-sm">
+              No classes available. Please create classes first.
+            </div>
+          )}
+        </div>
+
+        {/* SMS Alert Configuration */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">SMS Alert Configuration</h3>
+          <div className="space-y-4">
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="sms-enabled"
+                checked={settings?.sms_alerts?.enabled || false}
+                onChange={(e) => updateSetting('sms_alerts.enabled', e.target.checked)}
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              />
+              <label htmlFor="sms-enabled" className="ml-2 text-sm font-medium text-gray-700">
+                Enable SMS Alerts
+              </label>
+            </div>
+            {settings?.sms_alerts?.enabled && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Alert Types
+                  </label>
+                  <div className="space-y-2">
+                    {['late', 'absent', 'early_departure'].map((type) => (
+                      <div key={type} className="flex items-center">
+                        <input
+                          type="checkbox"
+                          id={`alert-${type}`}
+                          checked={settings?.sms_alerts?.alert_types?.includes(type) || false}
+                          onChange={(e) => {
+                            const currentTypes = settings?.sms_alerts?.alert_types || [];
+                            if (e.target.checked) {
+                              updateSetting('sms_alerts.alert_types', [...currentTypes, type]);
+                            } else {
+                              updateSetting('sms_alerts.alert_types', currentTypes.filter((t: string) => t !== type));
+                            }
+                          }}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        />
+                        <label htmlFor={`alert-${type}`} className="ml-2 text-sm font-medium text-gray-700 capitalize">
+                          {type.replace('_', ' ')}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Alert Time
+                  </label>
+                  <input
+                    type="time"
+                    value={settings?.sms_alerts?.time || '09:00'}
+                    onChange={(e) => updateSetting('sms_alerts.time', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Device Configuration */}
+        {settings?.device_config?.enabled && (
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Biometric Device Configuration</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Maximum Devices
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={settings?.device_config?.max_devices || 5}
+                  onChange={(e) => updateSetting('device_config.max_devices', parseInt(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Allowed Devices
+                </label>
+                <input
+                  type="text"
+                  placeholder="Device IDs separated by commas"
+                  value={settings?.device_config?.allowed_devices?.join(', ') || ''}
+                  onChange={(e) => updateSetting('device_config.allowed_devices', e.target.value.split(',').map(d => d.trim()))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Save Button */}
+        <div className="flex justify-end">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {saving ? 'Saving...' : 'Save Settings'}
+          </button>
+        </div>
       </div>
     </AttendanceLayout>
   );
@@ -504,9 +842,33 @@ const SuperAdminLoginPage: React.FC = () => {
 
 // Tenant Dashboard Component
 const TenantDashboard: React.FC = () => {
-  const { tenantInfo, tenantUser, setIsAuthenticated, setTenantId, setTenantUser, setTenantInfo, setTenantToken } = useTenant();
+  const { tenantInfo, tenantUser, setIsAuthenticated, setTenantId, setTenantUser, setTenantInfo, setTenantToken, tenantId } = useTenant();
   const navigate = useNavigate();
+  const [setupStatus, setSetupStatus] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   
+  // Fetch tenant setup status on component mount
+  useEffect(() => {
+    const fetchSetupStatus = async () => {
+      if (!tenantId) return;
+      
+      try {
+        const response = await fetch(`http://localhost:5000/api/tenants/${tenantId}/setup-status`);
+        const data = await response.json();
+        
+        if (data.success) {
+          setSetupStatus(data.data);
+        }
+      } catch (error) {
+        console.error('Error fetching setup status:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSetupStatus();
+  }, [tenantId]);
+
   const handleLogout = () => {
     setIsAuthenticated(false);
     setTenantId(null);
@@ -519,9 +881,53 @@ const TenantDashboard: React.FC = () => {
     localStorage.removeItem('tenantInfo');
     navigate('/tenant/login');
   };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'configured': return 'text-green-600';
+      case 'ready_to_setup': return 'text-blue-600';
+      case 'locked': return 'text-gray-500';
+      case 'setup_required': return 'text-yellow-600';
+      default: return 'text-gray-500';
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'configured': return 'Configured';
+      case 'ready_to_setup': return 'Ready to Setup';
+      case 'locked': return 'Locked';
+      case 'setup_required': return 'Setup Required';
+      default: return 'Unknown';
+    }
+  };
+
+  const getTooltipText = (module: string, prerequisites: any) => {
+    if (module === 'attendance' && !prerequisites?.academic_year) {
+      return 'Academic Year not configured';
+    }
+    if (module === 'attendance' && !prerequisites?.classes) {
+      return 'No classes exist';
+    }
+    if (module === 'attendance' && !prerequisites?.students) {
+      return 'No students exist';
+    }
+    return '';
+  };
   
   if (!tenantInfo || !tenantUser) {
     return <Navigate to="/tenant/login" replace />;
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    );
   }
   
   return (
@@ -534,12 +940,25 @@ const TenantDashboard: React.FC = () => {
             </div>
             <div className="flex items-center space-x-4">
               <span className="text-gray-700">Welcome, {tenantUser.name}</span>
-              <button
-                onClick={() => navigate('/change-password')}
-                className="bg-yellow-600 text-white px-4 py-2 rounded-md hover:bg-yellow-700"
-              >
-                Change Password
-              </button>
+              
+              {/* Profile Dropdown */}
+              <div className="relative">
+                <button className="bg-gray-100 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-200 flex items-center space-x-2">
+                  <span>Profile</span>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10">
+                  <button
+                    onClick={() => navigate('/change-password')}
+                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    Change Password
+                  </button>
+                </div>
+              </div>
+              
               <button
                 onClick={handleLogout}
                 className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
@@ -571,7 +990,8 @@ const TenantDashboard: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Domain & Branding Module */}
             <div className="bg-white overflow-hidden shadow rounded-lg">
               <div className="p-5">
                 <div className="flex items-center">
@@ -583,7 +1003,9 @@ const TenantDashboard: React.FC = () => {
                   <div className="ml-5 w-0 flex-1">
                     <dl>
                       <dt className="text-sm font-medium text-gray-500 truncate">Domain & Branding</dt>
-                      <dd className="text-lg font-medium text-gray-900">Setup Required</dd>
+                      <dd className={`text-lg font-medium ${getStatusColor(setupStatus?.modules?.domain_branding?.status || 'setup_required')}`}>
+                        {getStatusText(setupStatus?.modules?.domain_branding?.status || 'setup_required')}
+                      </dd>
                     </dl>
                   </div>
                   <div className="ml-5 flex-shrink-0">
@@ -597,25 +1019,8 @@ const TenantDashboard: React.FC = () => {
                 </div>
               </div>
             </div>
-            
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <div className="w-8 h-8 bg-green-500 rounded-md flex items-center justify-center">
-                      <span className="text-white font-bold">B</span>
-                    </div>
-                  </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">Branding</dt>
-                      <dd className="text-lg font-medium text-gray-900">Configured</dd>
-                    </dl>
-                  </div>
-                </div>
-              </div>
-            </div>
 
+            {/* Attendance System Module */}
             <div className="bg-white overflow-hidden shadow rounded-lg">
               <div className="p-5">
                 <div className="flex items-center">
@@ -627,21 +1032,65 @@ const TenantDashboard: React.FC = () => {
                   <div className="ml-5 w-0 flex-1">
                     <dl>
                       <dt className="text-sm font-medium text-gray-500 truncate">Attendance System</dt>
-                      <dd className="text-lg font-medium text-gray-900">Ready to Setup</dd>
+                      <dd className={`text-lg font-medium ${getStatusColor(setupStatus?.modules?.attendance?.status || 'locked')}`}>
+                        {getStatusText(setupStatus?.modules?.attendance?.status || 'locked')}
+                      </dd>
+                      {setupStatus?.modules?.attendance?.status === 'locked' && (
+                        <dd className="text-xs text-gray-500 mt-1">
+                          Prerequisites not met
+                        </dd>
+                      )}
                     </dl>
                   </div>
                   <div className="ml-5 flex-shrink-0">
-                    <button
-                      onClick={() => navigate('/attendance')}
-                      className="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700"
-                    >
-                      Configure
-                    </button>
+                    {setupStatus?.modules?.attendance?.available ? (
+                      <button
+                        onClick={() => navigate('/attendance')}
+                        className="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700"
+                      >
+                        Configure
+                      </button>
+                    ) : (
+                      <div className="relative group">
+                        <button
+                          disabled
+                          className="bg-gray-400 text-white px-3 py-1 rounded text-sm cursor-not-allowed"
+                          title={getTooltipText('attendance', setupStatus?.modules?.attendance?.prerequisites)}
+                        >
+                          Configure
+                        </button>
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                          {getTooltipText('attendance', setupStatus?.modules?.attendance?.prerequisites)}
+                          <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
             </div>
           </div>
+
+          {/* Prerequisites Status */}
+          {setupStatus?.modules?.attendance?.status === 'locked' && (
+            <div className="mt-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <h3 className="text-sm font-medium text-yellow-800 mb-2">Attendance System Prerequisites</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="flex items-center space-x-2">
+                  <div className={`w-3 h-3 rounded-full ${setupStatus?.modules?.attendance?.prerequisites?.academic_year ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                  <span className="text-sm text-yellow-700">Academic Year</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <div className={`w-3 h-3 rounded-full ${setupStatus?.modules?.attendance?.prerequisites?.classes ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                  <span className="text-sm text-yellow-700">Classes</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <div className={`w-3 h-3 rounded-full ${setupStatus?.modules?.attendance?.prerequisites?.students ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                  <span className="text-sm text-yellow-700">Students</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -244,11 +244,137 @@ const healthCheck = async (req, res) => {
   }
 };
 
+// Get tenant setup status
+const getTenantSetupStatus = async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+
+    if (!tenantId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Tenant ID is required'
+      });
+    }
+
+    // Get main database connection
+    const mainPool = require('../config/database').mainPool;
+    const client = await mainPool.connect();
+
+    try {
+      // Get tenant info and biometric settings
+      const tenantResult = await client.query(`
+        SELECT t.tenant_id, t.domain, t.school_name, tbs.biometric_enabled
+        FROM tenants t
+        LEFT JOIN tenant_biometric_settings tbs ON t.tenant_id = tbs.tenant_id
+        WHERE t.tenant_id = $1 AND t.status = $2
+      `, [tenantId, 'active']);
+
+      if (tenantResult.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Tenant not found'
+        });
+      }
+
+      const tenant = tenantResult.rows[0];
+
+      // Get tenant-specific database connection
+      const { createTenantPool } = require('../config/database');
+      const tenantPool = createTenantPool(tenant.tenant_id);
+      const tenantClient = await tenantPool.connect();
+
+      try {
+        // Check academic year configuration
+        const academicYearResult = await tenantClient.query(`
+          SELECT COUNT(*) as count FROM academic_years WHERE status = 'active'
+        `);
+        const hasAcademicYear = parseInt(academicYearResult.rows[0].count) > 0;
+
+        // Check classes
+        const classesResult = await tenantClient.query(`
+          SELECT COUNT(*) as count FROM classes WHERE status = 'active'
+        `);
+        const hasClasses = parseInt(classesResult.rows[0].count) > 0;
+
+        // Check students
+        const studentsResult = await tenantClient.query(`
+          SELECT COUNT(*) as count FROM students WHERE status = 'active'
+        `);
+        const hasStudents = parseInt(studentsResult.rows[0].count) > 0;
+
+        // Check attendance configuration
+        const attendanceResult = await tenantClient.query(`
+          SELECT COUNT(*) as count FROM attendance_config WHERE id IS NOT NULL
+        `);
+        const hasAttendanceConfig = parseInt(attendanceResult.rows[0].count) > 0;
+
+        // Check domain and branding
+        const brandingResult = await client.query(`
+          SELECT COUNT(*) as count FROM tenant_branding WHERE tenant_id = $1
+        `, [tenantId]);
+        const hasBranding = parseInt(brandingResult.rows[0].count) > 0;
+
+        // Determine attendance status
+        let attendanceStatus = 'locked';
+        if (tenant.biometric_enabled && hasAcademicYear && hasClasses && hasStudents) {
+          attendanceStatus = hasAttendanceConfig ? 'configured' : 'ready_to_setup';
+        } else if (hasAcademicYear && hasClasses && hasStudents) {
+          attendanceStatus = hasAttendanceConfig ? 'configured' : 'ready_to_setup';
+        }
+
+        // Determine domain and branding status
+        const domainBrandingStatus = hasBranding ? 'configured' : 'setup_required';
+
+        res.json({
+          success: true,
+          data: {
+            tenant_id: tenant.tenant_id,
+            domain: tenant.domain,
+            school_name: tenant.school_name,
+            biometric_enabled: tenant.biometric_enabled || false,
+            modules: {
+              domain_branding: {
+                status: domainBrandingStatus,
+                available: true
+              },
+              attendance: {
+                status: attendanceStatus,
+                available: tenant.biometric_enabled || (hasAcademicYear && hasClasses && hasStudents),
+                prerequisites: {
+                  academic_year: hasAcademicYear,
+                  classes: hasClasses,
+                  students: hasStudents,
+                  biometric_enabled: tenant.biometric_enabled || false
+                }
+              }
+            }
+          }
+        });
+
+      } finally {
+        tenantClient.release();
+        tenantPool.end();
+      }
+
+    } finally {
+      client.release();
+    }
+
+  } catch (error) {
+    console.error('Error getting tenant setup status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+};
+
 module.exports = {
   createTenant,
   checkDomainAvailability,
   getTenant,
   getAllTenants,
   updateTenant,
-  healthCheck
+  healthCheck,
+  getTenantSetupStatus
 }; 

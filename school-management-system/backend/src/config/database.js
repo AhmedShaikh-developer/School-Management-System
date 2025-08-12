@@ -284,6 +284,19 @@ const createTenantDatabase = async (tenantId, schoolName) => {
       )
     `);
 
+    // Create academic years table
+    await tenantClient.query(`
+      CREATE TABLE academic_years (
+        id SERIAL PRIMARY KEY,
+        year_name VARCHAR(50) NOT NULL,
+        start_date DATE NOT NULL,
+        end_date DATE NOT NULL,
+        status VARCHAR(20) DEFAULT 'active',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Create attendance configuration table
     await tenantClient.query(`
       CREATE TABLE attendance_config (

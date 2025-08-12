@@ -6,7 +6,8 @@ const {
   getTenant, 
   getAllTenants, 
   updateTenant, 
-  healthCheck 
+  healthCheck,
+  getTenantSetupStatus
 } = require('../controllers/tenantController');
 const { 
   validateTenantOnboarding, 
@@ -28,6 +29,9 @@ router.get('/', getAllTenants);
 
 // Get specific tenant
 router.get('/:tenantId', getTenant);
+
+// Get tenant setup status
+router.get('/:tenantId/setup-status', getTenantSetupStatus);
 
 // Update tenant status (admin only)
 router.patch('/:tenantId/status', updateTenant);
