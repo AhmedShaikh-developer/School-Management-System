@@ -15,6 +15,8 @@ const superAdminRoutes = require('./routes/superAdminRoutes');
 const authRoutes = require('./routes/authRoutes');
 const tenantAuthRoutes = require('./routes/tenantAuthRoutes');
 const tenantRoutes = require('./routes/tenantRoutes');
+const studentRoutes = require('./routes/studentRoutes');
+const classRoutes = require('./routes/classRoutes');
 const { authenticateToken } = require('./middleware/auth');
 const { authenticateTenant } = require('./middleware/tenantAuth');
 
@@ -187,6 +189,8 @@ app.use('/api/domains', domainRoutes);
 // Protected tenant-specific routes (require tenant authentication)
 app.use('/api/branding', authenticateTenant, brandingRoutes);
 app.use('/api/attendance', authenticateTenant, attendanceRoutes);
+app.use('/api/students', authenticateTenant, studentRoutes);
+app.use('/api/classes', authenticateTenant, classRoutes);
 
 // Protected super admin routes
 app.use('/api/super-admin', authenticateToken, superAdminRoutes);

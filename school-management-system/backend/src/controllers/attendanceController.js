@@ -99,7 +99,25 @@ const getTenantAttendanceSettings = async (req, res) => {
     
     // Get tenant-specific database connection
     const { createTenantPool } = require('../config/database');
-    const tenantPool = createTenantPool(tenantId);
+    
+    // Get the actual database name from the tenants table
+    const mainPool = require('../config/database').mainPool;
+    const mainClient = await mainPool.connect();
+    const dbNameResult = await mainClient.query(
+      'SELECT database_name FROM tenants WHERE tenant_id = $1',
+      [tenantId]
+    );
+    mainClient.release();
+    
+    if (dbNameResult.rows.length === 0 || !dbNameResult.rows[0].database_name) {
+      return res.status(500).json({
+        success: false,
+        message: 'Tenant database not configured'
+      });
+    }
+    
+    const tenantDbName = dbNameResult.rows[0].database_name;
+    const tenantPool = createTenantPool(tenantId, tenantDbName);
     const tenantClient = await tenantPool.connect();
 
     try {
@@ -178,7 +196,25 @@ const updateTenantAttendanceSettings = async (req, res) => {
     
     // Get tenant-specific database connection
     const { createTenantPool } = require('../config/database');
-    const tenantPool = createTenantPool(tenantId);
+    
+    // Get the actual database name from the tenants table
+    const mainPool = require('../config/database').mainPool;
+    const mainClient = await mainPool.connect();
+    const dbNameResult = await mainClient.query(
+      'SELECT database_name FROM tenants WHERE tenant_id = $1',
+      [tenantId]
+    );
+    mainClient.release();
+    
+    if (dbNameResult.rows.length === 0 || !dbNameResult.rows[0].database_name) {
+      return res.status(500).json({
+        success: false,
+        message: 'Tenant database not configured'
+      });
+    }
+    
+    const tenantDbName = dbNameResult.rows[0].database_name;
+    const tenantPool = createTenantPool(tenantId, tenantDbName);
     const tenantClient = await tenantPool.connect();
 
     try {

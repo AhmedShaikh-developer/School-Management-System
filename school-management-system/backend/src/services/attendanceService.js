@@ -1,16 +1,40 @@
-const { createTenantPool } = require('../config/database');
+const { createTenantPool, mainPool } = require('../config/database');
 const smsService = require('./smsService');
 
 class AttendanceService {
   constructor(tenantId) {
     this.tenantId = tenantId;
-    this.tenantPool = createTenantPool(tenantId);
+    this.tenantPool = null; // Will be initialized in initializePool
+  }
+
+  async initializePool() {
+    if (!this.tenantPool) {
+      // Get the actual database name from the tenants table
+      const client = await mainPool.connect();
+      try {
+        const dbNameResult = await client.query(
+          'SELECT database_name FROM tenants WHERE tenant_id = $1',
+          [this.tenantId]
+        );
+        
+        if (dbNameResult.rows.length === 0 || !dbNameResult.rows[0].database_name) {
+          throw new Error('Tenant database not configured');
+        }
+        
+        const tenantDbName = dbNameResult.rows[0].database_name;
+        this.tenantPool = createTenantPool(this.tenantId, tenantDbName);
+      } finally {
+        client.release();
+      }
+    }
+    return this.tenantPool;
   }
 
   // Get attendance configuration for a class
   async getAttendanceConfig(classId) {
     try {
-      const client = await this.tenantPool.connect();
+      const tenantPool = await this.initializePool();
+      const client = await tenantPool.connect();
       const result = await client.query(`
         SELECT * FROM attendance_config WHERE class_id = $1
       `, [classId]);
@@ -25,7 +49,8 @@ class AttendanceService {
   // Update attendance configuration for a class
   async updateAttendanceConfig(classId, config) {
     try {
-      const client = await this.tenantPool.connect();
+      const tenantPool = await this.initializePool();
+      const client = await tenantPool.connect();
       const {
         attendance_mode,
         grace_time_minutes,
@@ -87,7 +112,8 @@ class AttendanceService {
   // Record attendance
   async recordAttendance(attendanceData) {
     try {
-      const client = await this.tenantPool.connect();
+      const tenantPool = await this.initializePool();
+      const client = await tenantPool.connect();
       const {
         student_id,
         class_id,
@@ -134,7 +160,8 @@ class AttendanceService {
   // Check for attendance conflicts
   async checkAttendanceConflicts(studentId, classId, date, timeIn) {
     try {
-      const client = await this.tenantPool.connect();
+      const tenantPool = await this.initializePool();
+      const client = await tenantPool.connect();
       const result = await client.query(`
         SELECT * FROM attendance 
         WHERE student_id = $1 AND class_id = $2 AND date = $3
@@ -177,7 +204,8 @@ class AttendanceService {
   // Handle attendance conflicts
   async handleAttendanceConflicts(conflicts, newAttendanceData) {
     try {
-      const client = await this.tenantPool.connect();
+      const tenantPool = await this.initializePool();
+      const client = await tenantPool.connect();
       
       for (const conflict of conflicts) {
         // Log conflict
@@ -214,7 +242,8 @@ class AttendanceService {
   // Send attendance alert via SMS
   async sendAttendanceAlert(studentId, status) {
     try {
-      const client = await this.tenantPool.connect();
+      const tenantPool = await this.initializePool();
+      const client = await tenantPool.connect();
       
       // Get student and parent information
       const studentResult = await client.query(`
@@ -292,7 +321,8 @@ class AttendanceService {
   // Generate QR code for attendance
   async generateQRCode(classId, validFrom, validUntil, createdBy) {
     try {
-      const client = await this.tenantPool.connect();
+      const tenantPool = await this.initializePool();
+      const client = await tenantPool.connect();
       const qrCode = `QR_${classId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
       const result = await client.query(`
@@ -312,7 +342,8 @@ class AttendanceService {
   // Validate QR code for attendance
   async validateQRCode(qrCode, classId) {
     try {
-      const client = await this.tenantPool.connect();
+      const tenantPool = await this.initializePool();
+      const client = await tenantPool.connect();
       const result = await client.query(`
         SELECT * FROM qr_codes 
         WHERE qr_code = $1 AND class_id = $2 AND is_active = true
@@ -330,7 +361,8 @@ class AttendanceService {
   // Get attendance report
   async getAttendanceReport(classId, startDate, endDate) {
     try {
-      const client = await this.tenantPool.connect();
+      const tenantPool = await this.initializePool();
+      const client = await tenantPool.connect();
       const result = await client.query(`
         SELECT 
           s.student_id,
@@ -359,7 +391,8 @@ class AttendanceService {
   // Get attendance statistics
   async getAttendanceStatistics(classId, date) {
     try {
-      const client = await this.tenantPool.connect();
+      const tenantPool = await this.initializePool();
+      const client = await tenantPool.connect();
       const result = await client.query(`
         SELECT 
           status,
@@ -380,7 +413,8 @@ class AttendanceService {
   // Sync offline attendance
   async syncOfflineAttendance() {
     try {
-      const client = await this.tenantPool.connect();
+      const tenantPool = await this.initializePool();
+      const client = await tenantPool.connect();
       const offlineRecords = await client.query(`
         SELECT * FROM offline_attendance_queue 
         WHERE sync_status = 'pending'
@@ -429,6 +463,7 @@ class AttendanceService {
   async close() {
     if (this.tenantPool) {
       await this.tenantPool.end();
+      this.tenantPool = null;
     }
   }
 }

@@ -1,0 +1,204 @@
+/* Student Management Page - Complete Logo and Branding Removal */
+.student-management-page {
+  position: relative !important;
+  z-index: 1 !important;
+  overflow: hidden !important;
+  background: #f9fafb !important;
+  background-image: none !important;
+  background-size: auto !important;
+  background-position: center !important;
+}
+
+/* Remove ALL pseudo-elements completely */
+.student-management-page::before,
+.student-management-page::after {
+  display: none !important;
+  content: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+}
+
+.student-management-page *::before,
+.student-management-page *::after {
+  display: none !important;
+  content: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+}
+
+/* Hide ALL decorative elements including logos */
+.student-management-page [class*="arc"],
+.student-management-page [class*="circle"],
+.student-management-page [class*="logo"],
+.student-management-page [class*="branding"],
+.student-management-page [class*="decoration"],
+.student-management-page [class*="ornament"],
+.student-management-page [class*="icon"],
+.student-management-page [class*="symbol"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  position: absolute !important;
+  left: -9999px !important;
+  top: -9999px !important;
+  pointer-events: none !important;
+}
+
+/* Hide problematic background elements */
+.student-management-page [style*="background: black"],
+.student-management-page [style*="background: #000"],
+.student-management-page [style*="background-color: black"],
+.student-management-page [style*="background-color: #000"],
+.student-management-page [class*="black"],
+.student-management-page [class*="dark"] {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+/* Hide ALL SVG and canvas elements that might be logos */
+.student-management-page svg,
+.student-management-page canvas,
+.student-management-page img[class*="logo"],
+.student-management-page img[alt*="logo"],
+.student-management-page img[alt*="Logo"],
+.student-management-page img[alt*="branding"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+}
+
+/* Override ALL branding colors */
+.student-management-page .bg-primary,
+.student-management-page .bg-secondary,
+.student-management-page .bg-accent,
+.student-management-page [class*="bg-"] {
+  background-color: inherit !important;
+}
+
+/* Ensure proper layout */
+.student-management-page .container,
+.student-management-page .content {
+  position: relative !important;
+  z-index: 2 !important;
+}
+
+/* Hide problematic positioned elements */
+.student-management-page [style*="position: absolute"],
+.student-management-page [style*="position:fixed"] {
+  display: none !important;
+}
+
+/* Clean up any remaining problematic elements */
+.student-management-page [data-branding],
+.student-management-page [data-logo],
+.student-management-page [data-decoration],
+.student-management-page [data-icon] {
+  display: none !important;
+}
+
+/* Specifically target large black arc elements */
+.student-management-page div[style*="border-radius: 50%"],
+.student-management-page div[style*="width: 100%"],
+.student-management-page div[style*="height: 100%"],
+.student-management-page div[style*="position: absolute"],
+.student-management-page div[style*="position: fixed"] {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+/* Hide any elements with large dimensions that might be the arc */
+.student-management-page div[style*="width: 100vw"],
+.student-management-page div[style*="height: 100vh"],
+.student-management-page div[style*="width: 100%"],
+.student-management-page div[style*="height: 100%"] {
+  display: none !important;
+}
+
+/* Target any remaining problematic elements */
+.student-management-page *[style*="background: black"],
+.student-management-page *[style*="background: #000"],
+.student-management-page *[style*="background-color: black"],
+.student-management-page *[style*="background-color: #000"] {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+/* Nuclear option - hide any element that might be problematic */
+.student-management-page div:not(.student-management-page > div):not(.student-management-page > div > *):not(.student-management-page > div > div > *) {
+  max-width: 100% !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+}
+
+/* Ensure no element can be larger than the viewport */
+.student-management-page * {
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  box-sizing: border-box !important;
+}
+
+/* Ensure clean typography */
+.student-management-page h1,
+.student-management-page h2,
+.student-management-page h3,
+.student-management-page h4,
+.student-management-page h5,
+.student-management-page h6 {
+  color: #111827 !important;
+  font-weight: 600 !important;
+}
+
+/* Clean button styling */
+.student-management-page button {
+  border-radius: 0.375rem !important;
+  font-weight: 500 !important;
+}
+
+/* Clean input styling */
+.student-management-page input,
+.student-management-page select,
+.student-management-page textarea {
+  border-radius: 0.375rem !important;
+  border-color: #d1d5db !important;
+}
+
+/* Ensure proper shadows */
+.student-management-page .shadow,
+.student-management-page .shadow-sm,
+.student-management-page .shadow-md,
+.student-management-page .shadow-lg {
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06) !important;
+}
+
+/* Additional aggressive logo removal */
+.student-management-page [id*="logo"],
+.student-management-page [id*="branding"],
+.student-management-page [id*="decoration"],
+.student-management-page [name*="logo"],
+.student-management-page [name*="branding"],
+.student-management-page [title*="logo"],
+.student-management-page [title*="branding"] {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+/* Remove any remaining image elements that might be logos */
+.student-management-page img:not([alt*="student"]):not([alt*="Student"]):not([alt*="profile"]):not([alt*="Profile"]) {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+/* Ensure clean page structure */
+.student-management-page {
+  min-height: 100vh !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.student-management-page > * {
+  position: relative !important;
+  z-index: 1 !important;
+}

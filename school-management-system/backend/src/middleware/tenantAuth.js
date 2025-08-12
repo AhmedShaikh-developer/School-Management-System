@@ -40,8 +40,23 @@ const authenticateTenant = async (req, res, next) => {
       });
     }
 
+    // Get the actual database name from the tenants table
+    const dbNameResult = await mainClient.query(
+      'SELECT database_name FROM tenants WHERE tenant_id = $1',
+      [decoded.tenantId]
+    );
+    
+    if (dbNameResult.rows.length === 0 || !dbNameResult.rows[0].database_name) {
+      return res.status(401).json({
+        success: false,
+        message: 'Tenant database not configured'
+      });
+    }
+    
+    const tenantDbName = dbNameResult.rows[0].database_name;
+    
     // Verify user exists in tenant database
-    const tenantPool = createTenantPool(decoded.tenantId);
+    const tenantPool = createTenantPool(decoded.tenantId, tenantDbName);
     const tenantClient = await tenantPool.connect();
     const userResult = await tenantClient.query(
       'SELECT id, email, name, role, status FROM users WHERE id = $1 AND status = $2',
@@ -57,7 +72,7 @@ const authenticateTenant = async (req, res, next) => {
       });
     }
 
-    req.tenant = tenantResult.rows[0];
+    req.tenant = { tenant_id: decoded.tenantId };
     req.user = userResult.rows[0];
     next();
   } catch (error) {
@@ -102,11 +117,21 @@ const verifyTenantCredentials = async (tenantId, email, password) => {
 
     console.log(`[AUTH] Tenant found: ${tenantResult.rows[0].school_name}`);
 
-    // Check user credentials in tenant database
-    const tenantDbName = `${process.env.TENANT_DB_PREFIX || 'school_'}${tenantId}`;
+    // Get the actual database name from the tenants table
+    const dbNameResult = await mainClient.query(
+      'SELECT database_name FROM tenants WHERE tenant_id = $1',
+      [tenantId]
+    );
+    
+    if (dbNameResult.rows.length === 0 || !dbNameResult.rows[0].database_name) {
+      console.log(`[AUTH] Database name not found for tenant: ${tenantId}`);
+      return { success: false, message: 'Tenant database not configured' };
+    }
+    
+    const tenantDbName = dbNameResult.rows[0].database_name;
     console.log(`[AUTH] Connecting to tenant database: ${tenantDbName}`);
     
-    tenantPool = createTenantPool(tenantId);
+    tenantPool = createTenantPool(tenantId, tenantDbName);
     tenantClient = await tenantPool.connect();
     
     // Check if user exists

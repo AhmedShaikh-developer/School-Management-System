@@ -219,7 +219,22 @@ const changePassword = async (req, res) => {
 
       // Get tenant-specific database connection
       const { createTenantPool } = require('../config/database');
-      const tenantPool = createTenantPool(tenant.tenant_id);
+      
+      // Get the actual database name from the tenants table
+      const dbNameResult = await client.query(
+        'SELECT database_name FROM tenants WHERE tenant_id = $1',
+        [tenant.tenant_id]
+      );
+      
+      if (dbNameResult.rows.length === 0 || !dbNameResult.rows[0].database_name) {
+        return res.status(500).json({
+          success: false,
+          message: 'Tenant database not configured'
+        });
+      }
+      
+      const tenantDbName = dbNameResult.rows[0].database_name;
+      const tenantPool = createTenantPool(tenant.tenant_id, tenantDbName);
       const tenantClient = await tenantPool.connect();
 
       try {

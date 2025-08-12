@@ -334,13 +334,79 @@ const createTenantDatabase = async (tenantId, schoolName, databaseName = null) =
         gender VARCHAR(10),
         address TEXT,
         parent_id INTEGER,
-        class_id INTEGER,
+        class_id INTEGER REFERENCES classes(id),
         enrollment_date DATE DEFAULT CURRENT_DATE,
         status VARCHAR(20) DEFAULT 'active',
         photo_url VARCHAR(500),
         biometric_data JSONB,
+        emergency_contact_name VARCHAR(100),
+        emergency_contact_phone VARCHAR(20),
+        emergency_contact_relationship VARCHAR(50),
+        medical_conditions TEXT,
+        allergies TEXT,
+        blood_group VARCHAR(5),
+        nationality VARCHAR(50),
+        religion VARCHAR(50),
+        mother_tongue VARCHAR(50),
+        previous_school VARCHAR(255),
+        academic_year VARCHAR(20),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create student documents table
+    await tenantClient.query(`
+      CREATE TABLE student_documents (
+        id SERIAL PRIMARY KEY,
+        student_id INTEGER REFERENCES students(id) ON DELETE CASCADE,
+        document_name VARCHAR(255) NOT NULL,
+        file_path VARCHAR(500) NOT NULL,
+        file_size INTEGER NOT NULL,
+        mime_type VARCHAR(100) NOT NULL,
+        document_type VARCHAR(50) DEFAULT 'general',
+        description TEXT,
+        uploaded_by INTEGER REFERENCES users(id),
+        status VARCHAR(20) DEFAULT 'active',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create student transfers table
+    await tenantClient.query(`
+      CREATE TABLE student_transfers (
+        id SERIAL PRIMARY KEY,
+        student_id INTEGER REFERENCES students(id) ON DELETE CASCADE,
+        from_class_id INTEGER REFERENCES classes(id),
+        to_class_id INTEGER REFERENCES classes(id) NOT NULL,
+        transfer_reason TEXT,
+        effective_date DATE NOT NULL,
+        approved_by INTEGER REFERENCES users(id),
+        status VARCHAR(20) DEFAULT 'completed',
+        remarks TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create student attendance summary table
+    await tenantClient.query(`
+      CREATE TABLE student_attendance_summary (
+        id SERIAL PRIMARY KEY,
+        student_id INTEGER REFERENCES students(id) ON DELETE CASCADE,
+        class_id INTEGER REFERENCES classes(id),
+        academic_year VARCHAR(20),
+        month INTEGER,
+        year INTEGER,
+        total_days INTEGER DEFAULT 0,
+        present_days INTEGER DEFAULT 0,
+        absent_days INTEGER DEFAULT 0,
+        late_days INTEGER DEFAULT 0,
+        attendance_percentage DECIMAL(5,2) DEFAULT 0.00,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(student_id, class_id, academic_year, month, year)
       )
     `);
 
@@ -367,7 +433,8 @@ const createTenantDatabase = async (tenantId, schoolName, databaseName = null) =
       CREATE TABLE classes (
         id SERIAL PRIMARY KEY,
         class_name VARCHAR(100) NOT NULL,
-        grade_level VARCHAR(50),
+        grade_level VARCHAR(50) NOT NULL,
+        section VARCHAR(50),
         capacity INTEGER DEFAULT 30,
         teacher_id INTEGER REFERENCES teachers(id),
         academic_year VARCHAR(20),

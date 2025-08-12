@@ -10,6 +10,8 @@ import SuperAdminBiometric from './components/SuperAdminBiometric';
 import SuperAdminLogin from './components/SuperAdminLogin';
 import ChangePassword from './components/ChangePassword';
 import OnboardingSuccess from './components/OnboardingSuccess';
+import StudentManagement from './components/StudentManagement/StudentManagement';
+import ClassManagement from './components/ClassManagement/ClassManagement';
 
 import axios from 'axios';
 import './App.css';
@@ -1069,6 +1071,60 @@ const TenantDashboard: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* Student Management Module */}
+            <div className="bg-white overflow-hidden shadow rounded-lg">
+              <div className="p-5">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 bg-green-500 rounded-md flex items-center justify-center">
+                      <span className="text-white font-bold">S</span>
+                    </div>
+                  </div>
+                  <div className="ml-5 w-0 flex-1">
+                    <dl>
+                      <dt className="text-sm font-medium text-gray-500 truncate">Student Management</dt>
+                      <dd className="text-lg font-medium text-green-600">Ready to Setup</dd>
+                    </dl>
+                  </div>
+                  <div className="ml-5 flex-shrink-0">
+                    <button
+                      onClick={() => navigate('/students')}
+                      className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700"
+                    >
+                      Manage Students
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Class Management Module */}
+            <div className="bg-white overflow-hidden shadow rounded-lg">
+              <div className="p-5">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 bg-indigo-500 rounded-md flex items-center justify-center">
+                      <span className="text-white font-bold">C</span>
+                    </div>
+                  </div>
+                  <div className="ml-5 w-0 flex-1">
+                    <dl>
+                      <dt className="text-sm font-medium text-gray-500 truncate">Class Management</dt>
+                      <dd className="text-lg font-medium text-indigo-600">Ready to Setup</dd>
+                    </dl>
+                  </div>
+                  <div className="ml-5 flex-shrink-0">
+                    <button
+                      onClick={() => navigate('/classes')}
+                      className="bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700"
+                    >
+                      Manage Classes
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Prerequisites Status */}
@@ -1335,6 +1391,8 @@ function App() {
               <Route path="/change-password" element={<ChangePassword />} />
               <Route path="/domain-and-branding" element={<DomainAndBrandingPage />} />
               <Route path="/attendance" element={<AttendancePage />} />
+              <Route path="/students" element={<StudentManagement />} />
+        <Route path="/classes" element={<ClassManagement />} />
               <Route path="/super-admin/login" element={<SuperAdminLoginPage />} />
               <Route path="/super-admin/dashboard" element={<SuperAdminDashboard />} />
               <Route path="/super-admin" element={<Navigate to="/super-admin/login" replace />} />
