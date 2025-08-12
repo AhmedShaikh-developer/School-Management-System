@@ -14,8 +14,16 @@ const mainPool = new Pool({
 });
 
 // Function to create tenant-specific database pool
-const createTenantPool = (tenantId) => {
-  const tenantDbName = `${process.env.TENANT_DB_PREFIX}${tenantId}`;
+const createTenantPool = (tenantId, databaseName = null) => {
+  let tenantDbName;
+  
+  if (databaseName) {
+    // Use the provided database name (for new tenants with clean names)
+    tenantDbName = databaseName;
+  } else {
+    // Fallback to old naming pattern (for existing tenants)
+    tenantDbName = `${process.env.TENANT_DB_PREFIX}${tenantId}`;
+  }
   
   return new Pool({
     host: process.env.DB_HOST,
@@ -48,11 +56,44 @@ const initializeMainDatabase = async () => {
         student_count INTEGER,
         address TEXT,
         website VARCHAR(255),
+        database_name VARCHAR(100),
         status VARCHAR(20) DEFAULT 'active',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Add database_name column to existing tenants table if it doesn't exist
+    try {
+      await client.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'tenants' 
+            AND column_name = 'database_name'
+          ) THEN
+            -- Add the column as nullable first
+            ALTER TABLE tenants ADD COLUMN database_name VARCHAR(100);
+            
+            -- Populate existing records with their current database names
+            UPDATE tenants 
+            SET database_name = 'school_tenant_' || REPLACE(tenant_id, 'tenant_', '')
+            WHERE database_name IS NULL;
+            
+            -- Make the column NOT NULL after populating it
+            ALTER TABLE tenants ALTER COLUMN database_name SET NOT NULL;
+            
+            RAISE NOTICE 'Added database_name column to tenants table and populated existing records';
+          ELSE
+            RAISE NOTICE 'database_name column already exists in tenants table';
+          END IF;
+        END $$;
+      `);
+    } catch (migrationError) {
+      console.log('Migration for database_name column:', migrationError.message);
+      // Continue even if migration fails
+    }
 
     // Create custom domains table
     await client.query(`
@@ -201,17 +242,69 @@ const initializeMainDatabase = async () => {
 };
 
 // Create tenant database schema
-const createTenantDatabase = async (tenantId, schoolName) => {
-  const tenantDbName = `${process.env.TENANT_DB_PREFIX}${tenantId}`;
+const createTenantDatabase = async (tenantId, schoolName, databaseName = null) => {
+  let tenantDbName;
+  
+  if (databaseName) {
+    // Use the provided database name (for new tenants with clean names)
+    tenantDbName = databaseName;
+  } else {
+    // Fallback to old naming pattern (for backward compatibility)
+    const sanitizeDatabaseName = (name) => {
+      return name
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '_') // Replace non-alphanumeric with underscore
+        .replace(/_+/g, '_') // Replace multiple underscores with single
+        .replace(/^_|_$/g, '') // Remove leading/trailing underscores
+        .substring(0, 30); // Limit length for PostgreSQL
+    };
+    
+    // Generate base database name
+    let baseDbName;
+    if (schoolName && schoolName.toLowerCase() !== 'school' && schoolName.toLowerCase() !== 'new') {
+      baseDbName = `school_${sanitizeDatabaseName(schoolName)}`;
+    } else {
+      // Fallback to timestamp-based name if school name is too generic
+      baseDbName = `school_${Date.now().toString(36)}`;
+    }
+    
+    // Check if database name already exists and add suffix if needed
+    tenantDbName = baseDbName;
+    let counter = 1;
+    
+    const client = await mainPool.connect();
+    try {
+      while (true) {
+        const exists = await client.query(`
+          SELECT 1 FROM pg_database WHERE datname = $1
+        `, [tenantDbName]);
+        
+        if (exists.rows.length === 0) {
+          break; // Name is available
+        }
+        
+        // Name exists, try with suffix
+        tenantDbName = `${baseDbName}_${counter}`;
+        counter++;
+        
+        // Prevent infinite loop (max 100 attempts)
+        if (counter > 100) {
+          throw new Error(`Could not find available database name after 100 attempts`);
+        }
+      }
+    } finally {
+      client.release();
+    }
+  }
   
   try {
-    // Create database
+    // Create database with the clean name
     const client = await mainPool.connect();
     await client.query(`CREATE DATABASE "${tenantDbName}"`);
     client.release();
 
     // Create tenant-specific pool
-    const tenantPool = createTenantPool(tenantId);
+    const tenantPool = createTenantPool(tenantId, tenantDbName);
     const tenantClient = await tenantPool.connect();
 
     // Create users table (existing)
@@ -431,7 +524,7 @@ const createTenantDatabase = async (tenantId, schoolName) => {
     tenantPool.end();
     
     console.log(`Tenant database ${tenantDbName} created successfully with attendance system`);
-    return true;
+    return tenantDbName; // Return the database name for storage in tenants table
   } catch (error) {
     console.error(`Error creating tenant database ${tenantDbName}:`, error);
     throw error;
@@ -439,8 +532,16 @@ const createTenantDatabase = async (tenantId, schoolName) => {
 };
 
 // Drop tenant database (for rollback)
-const dropTenantDatabase = async (tenantId) => {
-  const tenantDbName = `${process.env.TENANT_DB_PREFIX}${tenantId}`;
+const dropTenantDatabase = async (tenantId, databaseName = null) => {
+  let tenantDbName;
+  
+  if (databaseName) {
+    // Use the provided database name (for new tenants with clean names)
+    tenantDbName = databaseName;
+  } else {
+    // Fallback to old naming pattern (for existing tenants)
+    tenantDbName = `${process.env.TENANT_DB_PREFIX}${tenantId}`;
+  }
   
   try {
     const client = await mainPool.connect();

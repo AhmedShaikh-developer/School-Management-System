@@ -176,7 +176,221 @@ If you have any questions, please contact our support team.
   }
 };
 
+// Send Super Admin notification for new school onboarding
+const sendSuperAdminNotification = async (superAdminEmail, tenantData) => {
+  try {
+    const transporter = createTransporter();
+    
+    const mailOptions = {
+      from: `"${process.env.EMAIL_USER}" <${process.env.EMAIL_USER}>`,
+      to: superAdminEmail,
+      subject: 'New School Onboarded - School Management System',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+          <div style="background-color: #FF9800; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+            <h1 style="margin: 0; font-size: 24px;">New School Onboarded</h1>
+          </div>
+          
+          <div style="padding: 20px; background-color: #f9f9f9;">
+            <p style="font-size: 16px; color: #333; margin-bottom: 20px;">
+              Hello <strong>Super Administrator</strong>,
+            </p>
+            
+            <p style="font-size: 16px; color: #333; margin-bottom: 20px;">
+              A new school has been successfully onboarded to the School Management System.
+            </p>
+            
+            <div style="background-color: #fff3e0; border-left: 4px solid #FF9800; padding: 15px; margin: 20px 0;">
+              <h3 style="margin: 0 0 15px 0; color: #e65100;">School Details:</h3>
+              <p style="margin: 5px 0; color: #333;">
+                <strong>School Name:</strong> ${tenantData.schoolName}<br>
+                <strong>Domain:</strong> ${tenantData.domain}<br>
+                <strong>Admin Name:</strong> ${tenantData.adminName}<br>
+                <strong>Admin Email:</strong> ${tenantData.adminEmail}<br>
+                <strong>Phone:</strong> ${tenantData.phone || 'Not provided'}<br>
+                <strong>School Type:</strong> ${tenantData.schoolType || 'Not specified'}<br>
+                <strong>Student Count:</strong> ${tenantData.studentCount || 'Not specified'}<br>
+                <strong>Address:</strong> ${tenantData.address || 'Not provided'}<br>
+                <strong>Website:</strong> ${tenantData.website || 'Not provided'}
+              </p>
+            </div>
+            
+            <p style="font-size: 16px; color: #333; margin-bottom: 20px;">
+              The school has been set up with their own isolated database and the admin user has been created with temporary credentials.
+            </p>
+            
+            <div style="background-color: #e8f5e8; border-left: 4px solid #4CAF50; padding: 15px; margin: 20px 0;">
+              <p style="margin: 0; color: #2e7d32;">
+                <strong>Next Steps:</strong><br>
+                • The tenant admin will receive login credentials via email<br>
+                • They can access their portal at: ${tenantData.domain}.${process.env.APP_URL || 'localhost:3000'}<br>
+                • Monitor their setup progress through the admin dashboard
+              </p>
+            </div>
+            
+            <p style="font-size: 14px; color: #666; margin-top: 30px; border-top: 1px solid #e0e0e0; padding-top: 20px;">
+              This is an automated notification. Please do not reply to this email.
+              <br>
+              If you need to review or manage this tenant, please access the admin dashboard.
+            </p>
+          </div>
+        </div>
+      `,
+      text: `
+New School Onboarded - School Management System
+
+Hello Super Administrator,
+
+A new school has been successfully onboarded to the School Management System.
+
+School Details:
+School Name: ${tenantData.schoolName}
+Domain: ${tenantData.domain}
+Admin Name: ${tenantData.adminName}
+Admin Email: ${tenantData.adminEmail}
+Phone: ${tenantData.phone || 'Not provided'}
+School Type: ${tenantData.schoolType || 'Not specified'}
+Student Count: ${tenantData.studentCount || 'Not specified'}
+Address: ${tenantData.address || 'Not provided'}
+Website: ${tenantData.website || 'Not provided'}
+
+The school has been set up with their own isolated database and the admin user has been created with temporary credentials.
+
+Next Steps:
+• The tenant admin will receive login credentials via email
+• They can access their portal at: ${tenantData.domain}.${process.env.APP_URL || 'localhost:3000'}
+• Monitor their setup progress through the admin dashboard
+
+This is an automated notification. Please do not reply to this email.
+If you need to review or manage this tenant, please access the admin dashboard.
+      `
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log('Super Admin notification email sent:', info.messageId);
+    return { success: true, messageId: info.messageId };
+    
+  } catch (error) {
+    console.error('Error sending Super Admin notification email:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Send Super Admin notification for failed tenant onboarding
+const sendFailureNotification = async (superAdminEmail, tenantData, errorMessage) => {
+  try {
+    const transporter = createTransporter();
+    
+    const mailOptions = {
+      from: `"${process.env.EMAIL_USER}" <${process.env.EMAIL_USER}>`,
+      to: superAdminEmail,
+      subject: 'Tenant Onboarding Failed - School Management System',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+          <div style="background-color: #f44336; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+            <h1 style="margin: 0; font-size: 24px;">Tenant Onboarding Failed</h1>
+          </div>
+          
+          <div style="padding: 20px; background-color: #f9f9f9;">
+            <p style="font-size: 16px; color: #333; margin-bottom: 20px;">
+              Hello <strong>Super Administrator</strong>,
+            </p>
+            
+            <p style="font-size: 16px; color: #333; margin-bottom: 20px;">
+              A tenant onboarding process has failed and requires your attention.
+            </p>
+            
+            <div style="background-color: #ffebee; border-left: 4px solid #f44336; padding: 15px; margin: 20px 0;">
+              <h3 style="margin: 0 0 15px 0; color: #c62828;">Failed Onboarding Details:</h3>
+              <p style="margin: 5px 0; color: #333;">
+                <strong>School Name:</strong> ${tenantData.schoolName}<br>
+                <strong>Domain:</strong> ${tenantData.domain}<br>
+                <strong>Admin Name:</strong> ${tenantData.adminName}<br>
+                <strong>Admin Email:</strong> ${tenantData.adminEmail}<br>
+                <strong>Phone:</strong> ${tenantData.phone || 'Not provided'}<br>
+                <strong>School Type:</strong> ${tenantData.schoolType || 'Not specified'}<br>
+                <strong>Student Count:</strong> ${tenantData.studentCount || 'Not specified'}<br>
+                <strong>Address:</strong> ${tenantData.address || 'Not provided'}<br>
+                <strong>Website:</strong> ${tenantData.website || 'Not provided'}
+              </p>
+            </div>
+            
+            <div style="background-color: #fff3e0; border-left: 4px solid #FF9800; padding: 15px; margin: 20px 0;">
+              <h3 style="margin: 0 0 15px 0; color: #e65100;">Error Details:</h3>
+              <p style="margin: 0; color: #e65100;">
+                <strong>Error Message:</strong> ${errorMessage}
+              </p>
+            </div>
+            
+            <p style="font-size: 16px; color: #333; margin-bottom: 20px;">
+              The system has attempted to rollback any partial changes, but manual intervention may be required.
+            </p>
+            
+            <div style="background-color: #e8f5e8; border-left: 4px solid #4CAF50; padding: 15px; margin: 20px 0;">
+              <p style="margin: 0; color: #2e7d32;">
+                <strong>Recommended Actions:</strong><br>
+                • Check the system logs for detailed error information<br>
+                • Verify database connectivity and permissions<br>
+                • Ensure all required services are running<br>
+                • Contact the tenant admin if manual intervention is needed
+              </p>
+            </div>
+            
+            <p style="font-size: 14px; color: #666; margin-top: 30px; border-top: 1px solid #e0e0e0; padding-top: 20px;">
+              This is an automated notification. Please do not reply to this email.
+              <br>
+              If you need to review the system status, please access the admin dashboard.
+            </p>
+          </div>
+        </div>
+      `,
+      text: `
+Tenant Onboarding Failed - School Management System
+
+Hello Super Administrator,
+
+A tenant onboarding process has failed and requires your attention.
+
+Failed Onboarding Details:
+School Name: ${tenantData.schoolName}
+Domain: ${tenantData.domain}
+Admin Name: ${tenantData.adminName}
+Admin Email: ${tenantData.adminEmail}
+Phone: ${tenantData.phone || 'Not provided'}
+School Type: ${tenantData.schoolType || 'Not specified'}
+Student Count: ${tenantData.studentCount || 'Not specified'}
+Address: ${tenantData.address || 'Not provided'}
+Website: ${tenantData.website || 'Not provided'}
+
+Error Details:
+Error Message: ${errorMessage}
+
+The system has attempted to rollback any partial changes, but manual intervention may be required.
+
+Recommended Actions:
+• Check the system logs for detailed error information
+• Verify database connectivity and permissions
+• Ensure all required services are running
+• Contact the tenant admin if manual intervention is needed
+
+This is an automated notification. Please do not reply to this email.
+If you need to review the system status, please access the admin dashboard.
+      `
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log('Failure notification email sent to Super Admin:', info.messageId);
+    return { success: true, messageId: info.messageId };
+    
+  } catch (error) {
+    console.error('Error sending failure notification email to Super Admin:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 module.exports = {
   sendPasswordChangeNotification,
-  sendWelcomeEmail
+  sendWelcomeEmail,
+  sendSuperAdminNotification,
+  sendFailureNotification
 }; 
