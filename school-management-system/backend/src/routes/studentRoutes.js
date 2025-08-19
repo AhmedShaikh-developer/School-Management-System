@@ -18,11 +18,30 @@ const {
 router.use(authenticateTenant);
 
 // Student CRUD operations
-router.get('/', getStudents);
-router.get('/:studentId', getStudent);
-router.post('/', createStudent);
-router.put('/:studentId', updateStudent);
-router.delete('/:studentId', deleteStudent);
+router.get('/', (req, res) => {
+  req.tenantId = req.tenant.tenant_id;
+  getStudents(req, res);
+});
+
+router.get('/:studentId', (req, res) => {
+  req.tenantId = req.tenant.tenant_id;
+  getStudent(req, res);
+});
+
+router.post('/', (req, res) => {
+  req.tenantId = req.tenant.tenant_id;
+  createStudent(req, res);
+});
+
+router.put('/:studentId', (req, res) => {
+  req.tenantId = req.tenant.tenant_id;
+  updateStudent(req, res);
+});
+
+router.delete('/:studentId', (req, res) => {
+  req.tenantId = req.tenant.tenant_id;
+  deleteStudent(req, res);
+});
 
 // Document management
 router.post('/:studentId/documents', upload.array('documents', 5), uploadDocuments);

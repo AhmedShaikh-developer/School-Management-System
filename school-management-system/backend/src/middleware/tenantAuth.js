@@ -31,9 +31,9 @@ const authenticateTenant = async (req, res, next) => {
       'SELECT tenant_id, school_name, domain, status FROM tenants WHERE tenant_id = $1 AND status = $2',
       [decoded.tenantId, 'active']
     );
-    mainClient.release();
 
     if (tenantResult.rows.length === 0) {
+      mainClient.release();
       return res.status(401).json({
         success: false,
         message: 'Invalid tenant'
@@ -45,6 +45,7 @@ const authenticateTenant = async (req, res, next) => {
       'SELECT database_name FROM tenants WHERE tenant_id = $1',
       [decoded.tenantId]
     );
+    mainClient.release();
     
     if (dbNameResult.rows.length === 0 || !dbNameResult.rows[0].database_name) {
       return res.status(401).json({
@@ -108,10 +109,10 @@ const verifyTenantCredentials = async (tenantId, email, password) => {
       'SELECT tenant_id, school_name, domain, status FROM tenants WHERE tenant_id = $1 AND status = $2',
       [tenantId, 'active']
     );
-    mainClient.release();
 
     if (tenantResult.rows.length === 0) {
       console.log(`[AUTH] Tenant not found or inactive: ${tenantId}`);
+      mainClient.release();
       return { success: false, message: 'Invalid tenant' };
     }
 
@@ -122,6 +123,7 @@ const verifyTenantCredentials = async (tenantId, email, password) => {
       'SELECT database_name FROM tenants WHERE tenant_id = $1',
       [tenantId]
     );
+    mainClient.release();
     
     if (dbNameResult.rows.length === 0 || !dbNameResult.rows[0].database_name) {
       console.log(`[AUTH] Database name not found for tenant: ${tenantId}`);
