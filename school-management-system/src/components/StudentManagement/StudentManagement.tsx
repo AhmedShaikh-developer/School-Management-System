@@ -52,14 +52,20 @@ const StudentManagement: React.FC = () => {
     try {
       setLoading(true);
       
+      // Build the query parameters
       const params = new URLSearchParams({
         page: page.toString(),
         limit: '20',
         search: searchTerm,
-        ...(selectedClass && { class_id: selectedClass }),
         ...(pagination.status && { status: pagination.status })
       });
-
+      
+      // Add class_id filter if selected
+      if (selectedClass && selectedClass !== '') {
+        params.append('class_id', selectedClass);
+        console.log('Adding class_id filter:', selectedClass);
+      }
+      
       console.log('=== FETCH STUDENTS DEBUG ===');
       console.log('Fetching students with params:', params.toString());
       console.log('Search term:', searchTerm);
@@ -78,6 +84,8 @@ const StudentManagement: React.FC = () => {
       });
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Response not OK:', response.status, errorText);
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
@@ -87,6 +95,24 @@ const StudentManagement: React.FC = () => {
       if (data.success) {
         console.log('Setting students:', data.data.students);
         console.log('Setting pagination:', data.data.pagination);
+        
+        // Verify the filter was applied correctly
+        if (selectedClass === 'unassigned') {
+          console.log('=== VERIFYING UNASSIGNED FILTER ===');
+          const unassignedStudents = data.data.students.filter((s: any) => s.class_id === null);
+          const assignedStudents = data.data.students.filter((s: any) => s.class_id !== null);
+          console.log('Students returned by API:', data.data.students.length);
+          console.log('Unassigned students in response:', unassignedStudents.length);
+          console.log('Assigned students in response:', assignedStudents.length);
+          
+          if (assignedStudents.length > 0) {
+            console.warn('WARNING: Assigned students found in unassigned filter response!');
+            assignedStudents.forEach((s: any) => {
+              console.warn(`  - ${s.first_name} ${s.last_name} (Class ID: ${s.class_id})`);
+            });
+          }
+        }
+        
         setStudents(data.data.students);
         setPagination(data.data.pagination);
       } else {
@@ -114,6 +140,7 @@ const StudentManagement: React.FC = () => {
   // Fetch classes for filtering
   const fetchClasses = useCallback(async () => {
     try {
+      console.log('Fetching classes...');
       const response = await fetch('http://localhost:5000/api/classes', {
         headers: {
           'Authorization': `Bearer ${tenantToken}`,
@@ -121,11 +148,21 @@ const StudentManagement: React.FC = () => {
         }
       });
 
+      console.log('Classes response status:', response.status);
+      
       if (response.ok) {
         const data = await response.json();
+        console.log('Classes response data:', data);
         if (data.success) {
+          console.log('Setting classes:', data.data);
           setClasses(data.data);
+        } else {
+          console.error('Classes API returned success: false:', data);
         }
+      } else {
+        console.error('Classes API error status:', response.status);
+        const errorText = await response.text();
+        console.error('Classes API error response:', errorText);
       }
     } catch (error) {
       console.error('Error fetching classes:', error);
@@ -153,10 +190,8 @@ const StudentManagement: React.FC = () => {
 
   // Class filter effect - trigger immediately when class filter changes
   useEffect(() => {
-    if (selectedClass !== '') {
-      console.log('Class filter effect triggered:', selectedClass);
-      fetchStudents(1);
-    }
+    console.log('Class filter effect triggered:', selectedClass);
+    fetchStudents(1);
   }, [selectedClass]); // Only depend on selectedClass
 
   // Aggressive logo and branding removal
@@ -276,13 +311,12 @@ const StudentManagement: React.FC = () => {
   };
 
   const resetFilters = () => {
+    console.log('Resetting filters');
     setSearchTerm('');
     setSelectedClass('');
     setPagination(prev => ({ ...prev, status: 'active' }));
-    // Clear localStorage
-    localStorage.removeItem('studentManagement_selectedClass');
-    // Refresh the list after resetting filters
-    setTimeout(() => fetchStudents(1), 100);
+    // Fetch students without filters
+    fetchStudents(1);
   };
 
   const manualRefresh = () => {
@@ -378,18 +412,21 @@ const StudentManagement: React.FC = () => {
                 onChange={(e) => {
                   const newClass = e.target.value;
                   console.log('Class filter changed from', selectedClass, 'to', newClass);
+                  console.log('New class type:', typeof newClass);
+                  console.log('New class truthy check:', !!newClass);
+                  console.log('New class length:', newClass.length);
                   setSelectedClass(newClass);
                   // Remove setTimeout - let useEffect handle the fetch
                 }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
               >
-                <option value="">All Classes</option>
-                {classes.map(cls => (
-                  <option key={cls.id} value={cls.id}>
-                    {cls.class_name} ({cls.grade_level})
-                  </option>
-                ))}
-                <option value="unassigned">📋 Unassigned Students</option>
+                                 <option value="">All Classes</option>
+                 {classes.map(cls => (
+                   <option key={cls.id} value={cls.id}>
+                     {cls.class_name} ({cls.grade_level})
+                   </option>
+                 ))}
+                 <option value="unassigned">📋 Unassigned Students</option>
               </select>
             </div>
 

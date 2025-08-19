@@ -27,55 +27,86 @@ const authenticateTenant = async (req, res, next) => {
     // Verify tenant exists in main database
     const mainPool = require('../config/database').mainPool;
     const mainClient = await mainPool.connect();
-    const tenantResult = await mainClient.query(
-      'SELECT tenant_id, school_name, domain, status FROM tenants WHERE tenant_id = $1 AND status = $2',
-      [decoded.tenantId, 'active']
-    );
+    
+    try {
+      const tenantResult = await mainClient.query(
+        'SELECT tenant_id, school_name, domain, status FROM tenants WHERE tenant_id = $1 AND status = $2',
+        [decoded.tenantId, 'active']
+      );
 
-    if (tenantResult.rows.length === 0) {
+      if (tenantResult.rows.length === 0) {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid tenant'
+        });
+      }
+
+      // Get the actual database name from the tenants table
+      const dbNameResult = await mainClient.query(
+        'SELECT database_name FROM tenants WHERE tenant_id = $1',
+        [decoded.tenantId]
+      );
+      
+      if (dbNameResult.rows.length === 0 || !dbNameResult.rows[0].database_name) {
+        return res.status(401).json({
+          success: false,
+          message: 'Tenant database not configured'
+        });
+      }
+      
+      const tenantDbName = dbNameResult.rows[0].database_name;
+      
+      // Check if the database actually exists
+      try {
+        const dbExistsResult = await mainClient.query(
+          "SELECT 1 FROM pg_database WHERE datname = $1",
+          [tenantDbName]
+        );
+        
+        if (dbExistsResult.rows.length === 0) {
+          console.error(`Database ${tenantDbName} does not exist for tenant ${decoded.tenantId}`);
+          return res.status(500).json({
+            success: false,
+            message: 'Tenant database not found. Please contact system administrator.'
+          });
+        }
+      } catch (dbCheckError) {
+        console.error('Error checking database existence:', dbCheckError);
+        return res.status(500).json({
+          success: false,
+          message: 'Error verifying tenant database. Please contact system administrator.'
+        });
+      }
+      
+      // Verify user exists in tenant database
+      const tenantPool = createTenantPool(decoded.tenantId, tenantDbName);
+      const tenantClient = await tenantPool.connect();
+      
+      try {
+        const userResult = await tenantClient.query(
+          'SELECT id, email, name, role, status FROM users WHERE id = $1 AND status = $2',
+          [decoded.userId, 'active']
+        );
+
+        if (userResult.rows.length === 0) {
+          return res.status(401).json({
+            success: false,
+            message: 'Invalid user'
+          });
+        }
+
+        req.tenant = { tenant_id: decoded.tenantId };
+        req.user = userResult.rows[0];
+        next();
+      } finally {
+        tenantClient.release();
+        tenantPool.end();
+      }
+      
+    } finally {
       mainClient.release();
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid tenant'
-      });
-    }
-
-    // Get the actual database name from the tenants table
-    const dbNameResult = await mainClient.query(
-      'SELECT database_name FROM tenants WHERE tenant_id = $1',
-      [decoded.tenantId]
-    );
-    mainClient.release();
-    
-    if (dbNameResult.rows.length === 0 || !dbNameResult.rows[0].database_name) {
-      return res.status(401).json({
-        success: false,
-        message: 'Tenant database not configured'
-      });
     }
     
-    const tenantDbName = dbNameResult.rows[0].database_name;
-    
-    // Verify user exists in tenant database
-    const tenantPool = createTenantPool(decoded.tenantId, tenantDbName);
-    const tenantClient = await tenantPool.connect();
-    const userResult = await tenantClient.query(
-      'SELECT id, email, name, role, status FROM users WHERE id = $1 AND status = $2',
-      [decoded.userId, 'active']
-    );
-    tenantClient.release();
-    tenantPool.end();
-
-    if (userResult.rows.length === 0) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid user'
-      });
-    }
-
-    req.tenant = { tenant_id: decoded.tenantId };
-    req.user = userResult.rows[0];
-    next();
   } catch (error) {
     console.error('Tenant token verification error:', error);
     return res.status(403).json({

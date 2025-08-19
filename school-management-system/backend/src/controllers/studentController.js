@@ -83,8 +83,24 @@ const getStudents = async (req, res) => {
     
     console.log('getStudents called with:', { tenantId, page, limit, search, class_id, status });
     
+    if (!tenantId) {
+      console.error('No tenantId in request');
+      return res.status(400).json({
+        success: false,
+        error: 'Tenant ID is required'
+      });
+    }
+    
     const tenantDbName = await getTenantDatabaseName(tenantId);
     console.log('Tenant database name:', tenantDbName);
+    
+    if (!tenantDbName) {
+      console.error('No database name found for tenant:', tenantId);
+      return res.status(500).json({
+        success: false,
+        error: 'Tenant database not configured'
+      });
+    }
     
     const tenantPool = createTenantPool(tenantId, tenantDbName);
     const client = await tenantPool.connect();
@@ -102,11 +118,11 @@ const getStudents = async (req, res) => {
       }
       
       if (class_id) {
-        paramCount++;
         if (class_id === 'unassigned') {
           whereClause += ` AND s.class_id IS NULL`;
           console.log('Filtering for unassigned students (class_id IS NULL)');
         } else {
+          paramCount++;
           whereClause += ` AND s.class_id = $${paramCount}`;
           params.push(class_id);
           console.log(`Filtering for class_id = ${class_id}`);
@@ -116,7 +132,7 @@ const getStudents = async (req, res) => {
       }
       
       // Add status filter
-      if (status && status !== 'all') {
+      if (status && status !== 'all' && status !== 'undefined') {
         paramCount++;
         whereClause += ` AND s.status = $${paramCount}`;
         params.push(status);
@@ -131,9 +147,18 @@ const getStudents = async (req, res) => {
       // Get total count with proper filtering
       const countQuery = `SELECT COUNT(DISTINCT s.id) FROM students s ${whereClause}`;
       console.log('Count query:', countQuery);
-      const countResult = await client.query(countQuery, params);
-      const totalStudents = parseInt(countResult.rows[0].count);
-      console.log('Total students found:', totalStudents);
+      
+      let totalStudents = 0;
+      try {
+        const countResult = await client.query(countQuery, params);
+        totalStudents = parseInt(countResult.rows[0].count);
+        console.log('Total students found:', totalStudents);
+      } catch (countError) {
+        console.error('Error executing count query:', countError);
+        console.error('Count query:', countQuery);
+        console.error('Count params:', params);
+        throw new Error(`Count query failed: ${countError.message}`);
+      }
       
       // Get students with pagination - simple approach to prevent duplicates
       paramCount++;
@@ -150,58 +175,94 @@ const getStudents = async (req, res) => {
       console.log('Students query:', studentsQuery);
       console.log('Query params:', [...params, limit, offset]);
       
-      const studentsResult = await client.query(studentsQuery, [...params, limit, offset]);
-      console.log('Students result rows:', studentsResult.rows.length);
-      console.log('First few students:', studentsResult.rows.slice(0, 3));
-      
-      // Debug: Show all students with their class info
-      console.log('\n=== ALL RETURNED STUDENTS ===');
-      studentsResult.rows.forEach((student, index) => {
-        console.log(`${index + 1}. ID: ${student.id}, Name: ${student.first_name} ${student.last_name}, Class ID: ${student.class_id}, Class Name: ${student.class_name}, Grade: ${student.grade_level}, Status: ${student.status}`);
-      });
-      
-      // Verify no duplicates in results
-      const studentIds = studentsResult.rows.map(s => s.id);
-      const uniqueIds = [...new Set(studentIds)];
-      if (studentIds.length !== uniqueIds.length) {
-        console.warn('Duplicate students detected in results!');
-        console.warn('Total rows:', studentIds.length, 'Unique IDs:', uniqueIds.length);
+      try {
+        const studentsResult = await client.query(studentsQuery, [...params, limit, offset]);
+        console.log('Students result rows:', studentsResult.rows.length);
+        console.log('First few students:', studentsResult.rows.slice(0, 3));
         
-        // Find the duplicates
-        const duplicates = studentIds.filter((id, index) => studentIds.indexOf(id) !== index);
-        console.warn('Duplicate IDs:', [...new Set(duplicates)]);
-      } else {
-        console.log('No duplicate students in results');
-      }
-      
-      // Additional debug: Check what the filter should have returned
-      if (class_id === 'unassigned') {
-        console.log('\n=== DEBUGGING UNASSIGNED FILTER ===');
-        const unassignedCheck = await client.query(`
-          SELECT COUNT(*) as count FROM students s 
-          WHERE s.status != 'deleted' AND s.class_id IS NULL
-        `);
-        console.log(`Total unassigned students in database: ${unassignedCheck.rows[0].count}`);
+        // Debug: Show all students with their class info
+        console.log('\n=== ALL RETURNED STUDENTS ===');
+        studentsResult.rows.forEach((student, index) => {
+          console.log(`${index + 1}. ID: ${student.id}, Name: ${student.first_name} ${student.last_name}, Class ID: ${student.class_id}, Class Name: ${student.class_name}, Grade: ${student.grade_level}, Status: ${student.status}`);
+        });
         
-        const assignedCheck = await client.query(`
-          SELECT COUNT(*) as count FROM students s 
-          WHERE s.status != 'deleted' AND s.class_id IS NOT NULL
-        `);
-        console.log(`Total assigned students in database: ${assignedCheck.rows[0].count}`);
-      }
-      
-      res.json({
-        success: true,
-        data: {
-          students: studentsResult.rows,
-          pagination: {
-            current_page: parseInt(page),
-            total_pages: Math.ceil(totalStudents / limit),
-            total_students: totalStudents,
-            limit: parseInt(limit)
-          }
+        // Verify no duplicates in results
+        const studentIds = studentsResult.rows.map(s => s.id);
+        const uniqueIds = [...new Set(studentIds)];
+        if (studentIds.length !== uniqueIds.length) {
+          console.warn('Duplicate students detected in results!');
+          console.warn('Total rows:', studentIds.length, 'Unique IDs:', uniqueIds.length);
+          
+          // Find the duplicates
+          const duplicates = studentIds.filter((id, index) => studentIds.indexOf(id) !== index);
+          console.warn('Duplicate IDs:', [...new Set(duplicates)]);
+        } else {
+          console.log('No duplicate students in results');
         }
-      });
+        
+        // Additional debug: Check what the filter should have returned
+        if (class_id === 'unassigned') {
+          console.log('\n=== DEBUGGING UNASSIGNED FILTER ===');
+          const unassignedCheck = await client.query(`
+            SELECT COUNT(*) as count FROM students s 
+            WHERE s.status != 'deleted' AND s.class_id IS NULL
+          `);
+          console.log(`Total unassigned students in database: ${unassignedCheck.rows[0].count}`);
+          
+          const assignedCheck = await client.query(`
+            SELECT COUNT(*) as count FROM students s 
+            WHERE s.status != 'deleted' AND s.class_id IS NOT NULL
+          `);
+          console.log(`Total assigned students in database: ${assignedCheck.rows[0].count}`);
+          
+          // Show the actual unassigned students
+          const unassignedStudents = await client.query(`
+            SELECT s.id, s.first_name, s.last_name, s.class_id, s.status
+            FROM students s 
+            WHERE s.status != 'deleted' AND s.class_id IS NULL
+            ORDER BY s.id
+          `);
+          console.log('Unassigned students found:', unassignedStudents.rows);
+        } else if (!class_id) {
+          console.log('\n=== DEBUGGING ALL CLASSES FILTER ===');
+          const totalCheck = await client.query(`
+            SELECT COUNT(*) as count FROM students s 
+            WHERE s.status != 'deleted'
+          `);
+          console.log(`Total students in database: ${totalCheck.rows[0].count}`);
+          
+          const unassignedCheck = await client.query(`
+            SELECT COUNT(*) as count FROM students s 
+            WHERE s.status != 'deleted' AND s.class_id IS NULL
+          `);
+          console.log(`Unassigned students in database: ${unassignedCheck.rows[0].count}`);
+          
+          const assignedCheck = await client.query(`
+            SELECT COUNT(*) as count FROM students s 
+            WHERE s.status != 'deleted' AND s.class_id IS NOT NULL
+          `);
+          console.log(`Assigned students in database: ${assignedCheck.rows[0].count}`);
+        }
+        
+        res.json({
+          success: true,
+          data: {
+            students: studentsResult.rows,
+            pagination: {
+              current_page: parseInt(page),
+              total_pages: Math.ceil(totalStudents / limit),
+              total_students: totalStudents,
+              limit: parseInt(limit)
+            }
+          }
+        });
+        
+      } catch (studentsError) {
+        console.error('Error executing students query:', studentsError);
+        console.error('Students query:', studentsQuery);
+        console.error('Students params:', [...params, limit, offset]);
+        throw new Error(`Students query failed: ${studentsError.message}`);
+      }
       
     } finally {
       client.release();
@@ -384,15 +445,56 @@ const updateStudent = async (req, res) => {
           : null;
       }
       
-      console.log('Cleaned update data:', updateData);
+             // Define allowed fields for updates
+       const allowedFields = [
+         'first_name', 'last_name', 'email', 'phone', 'date_of_birth', 
+         'gender', 'address', 'class_id', 'enrollment_date', 
+         'emergency_contact_name', 'emergency_contact_phone', 'emergency_contact_relationship',
+         'medical_conditions', 'allergies', 'blood_group', 'nationality', 
+         'religion', 'mother_tongue', 'previous_school'
+       ];
+       
+       // Handle class_id field - convert to integer or null
+       if (updateData.class_id !== undefined) {
+         if (updateData.class_id === '' || updateData.class_id === 'null' || updateData.class_id === null) {
+           updateData.class_id = null;
+         } else {
+           const classId = parseInt(updateData.class_id);
+           if (isNaN(classId)) {
+             return res.status(400).json({
+               success: false,
+               error: 'Invalid class ID format'
+             });
+           }
+           updateData.class_id = classId;
+           
+           // Verify that the class exists
+           const classExists = await client.query(
+             'SELECT id FROM classes WHERE id = $1 AND status = $2',
+             [classId, 'active']
+           );
+           
+           if (classExists.rows.length === 0) {
+             return res.status(400).json({
+               success: false,
+               error: 'Selected class does not exist or is not active'
+             });
+           }
+         }
+       }
+       
+       console.log('Cleaned update data:', updateData);
+       console.log('Allowed fields:', allowedFields);
+       console.log('Fields being updated:', Object.keys(updateData).filter(key => allowedFields.includes(key)));
+       
+       // Build update query dynamically - only update allowed fields
       
-      // Build update query dynamically
       const updateFields = [];
       const values = [];
       let paramCount = 1;
       
       Object.keys(updateData).forEach(key => {
-        if (key !== 'id' && key !== 'student_id' && key !== 'created_at') {
+        if (allowedFields.includes(key) && updateData[key] !== undefined) {
           updateFields.push(`${key} = $${paramCount}`);
           values.push(updateData[key]);
           paramCount++;
@@ -419,30 +521,38 @@ const updateStudent = async (req, res) => {
       
       console.log('Update query:', updateQuery);
       console.log('Update values:', values);
+      console.log('Final class_id value:', updateData.class_id);
       
       const result = await client.query(updateQuery, values);
       
-      console.log('Student updated successfully:', result.rows[0]);
-      
-      res.json({
-        success: true,
-        data: result.rows[0],
-        message: 'Student updated successfully'
-      });
+             console.log('Student updated successfully:', result.rows[0]);
+       console.log('Sending response with status 200');
+       console.log('Response data being sent:', {
+         success: true,
+         data: result.rows[0],
+         message: 'Student updated successfully'
+       });
+       
+       res.status(200).json({
+         success: true,
+         data: result.rows[0],
+         message: 'Student updated successfully'
+       });
       
     } finally {
       client.release();
       tenantPool.end();
     }
     
-  } catch (error) {
-    console.error('Error updating student:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to update student',
-      details: error.message
-    });
-  }
+     } catch (error) {
+     console.error('Error updating student:', error);
+     console.error('Error stack:', error.stack);
+     res.status(500).json({
+       success: false,
+       error: 'Failed to update student',
+       details: error.message
+     });
+   }
 };
 
 // Delete student (soft delete)

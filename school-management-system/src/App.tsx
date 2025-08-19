@@ -849,6 +849,7 @@ const TenantDashboard: React.FC = () => {
   const [setupStatus, setSetupStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [unassignedStudentsCount, setUnassignedStudentsCount] = useState<number>(0);
+  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   
   // Fetch tenant setup status on component mount
   useEffect(() => {
@@ -908,23 +909,38 @@ const TenantDashboard: React.FC = () => {
     navigate('/tenant/login');
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'configured': return 'text-green-600';
-      case 'ready_to_setup': return 'text-blue-600';
-      case 'locked': return 'text-gray-500';
-      case 'setup_required': return 'text-yellow-600';
-      default: return 'text-gray-500';
-    }
-  };
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'configured': return 'Configured';
-      case 'ready_to_setup': return 'Ready to Setup';
-      case 'locked': return 'Locked';
-      case 'setup_required': return 'Setup Required';
-      default: return 'Unknown';
+      case 'configured':
+        return (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+            ✅ Configured
+          </span>
+        );
+      case 'ready_to_setup':
+        return (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+            🚀 Ready to Setup
+          </span>
+        );
+      case 'locked':
+        return (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+            🔒 Locked
+          </span>
+        );
+      case 'setup_required':
+        return (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+            ⚠️ Setup Required
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+            ❓ Unknown
+          </span>
+        );
     }
   };
 
@@ -958,39 +974,91 @@ const TenantDashboard: React.FC = () => {
   
   return (
     <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow">
+      {/* Enhanced Top Navigation Bar */}
+      <nav className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
-              <h1 className="text-xl font-semibold text-gray-900">{tenantInfo.school_name} Dashboard</h1>
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                </div>
+                <div>
+                  <h1 className="text-xl font-semibold text-gray-900">{tenantInfo.school_name}</h1>
+                  <p className="text-sm text-gray-500">School Management Dashboard</p>
+                </div>
+              </div>
             </div>
+            
+            {/* Breadcrumb Navigation */}
+            <div className="hidden md:flex items-center">
+              <nav className="flex" aria-label="Breadcrumb">
+                <ol className="flex items-center space-x-2">
+                  <li>
+                    <div className="flex items-center">
+                      <svg className="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
+                      </svg>
+                      <span className="ml-2 text-sm text-gray-500">Dashboard</span>
+                    </div>
+                  </li>
+                </ol>
+              </nav>
+            </div>
+            
             <div className="flex items-center space-x-4">
-              <span className="text-gray-700">Welcome, {tenantUser.name}</span>
+              <span className="text-sm text-gray-700">Welcome, {tenantUser.name}</span>
               
-              {/* Profile Dropdown */}
+              {/* Enhanced Profile Dropdown */}
               <div className="relative">
-                <button className="bg-gray-100 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-200 flex items-center space-x-2">
-                  <span>Profile</span>
+                <button 
+                  onClick={() => setShowProfileDropdown(!showProfileDropdown)}
+                  className="bg-gray-100 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-200 flex items-center space-x-2 transition-colors"
+                >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  <span>Profile</span>
+                  <svg className={`w-4 h-4 transition-transform ${showProfileDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
                 </button>
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10">
-                  <button
-                    onClick={() => navigate('/change-password')}
-                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                  >
-                    Change Password
-                  </button>
-                </div>
+                
+                {showProfileDropdown && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10 border border-gray-200">
+                    <button
+                      onClick={() => {
+                        navigate('/change-password');
+                        setShowProfileDropdown(false);
+                      }}
+                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                        </svg>
+                        <span>Change Password</span>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => {
+                        handleLogout();
+                        setShowProfileDropdown(false);
+                      }}
+                      className="block w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50 transition-colors"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                        <span>Logout</span>
+                      </div>
+                    </button>
+                  </div>
+                )}
               </div>
-              
-              <button
-                onClick={handleLogout}
-                className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
-              >
-                Logout
-              </button>
             </div>
           </div>
         </div>
@@ -999,34 +1067,46 @@ const TenantDashboard: React.FC = () => {
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
           {/* Portal URL Display */}
-          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
             <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-medium text-blue-900">Your School Portal</h3>
-                <p className="text-sm text-blue-700 mt-1">
-                  Access your school at: <span className="font-mono font-medium">{tenantInfo.domain}.{window.location.host}</span>
-                </p>
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-sm font-medium text-blue-900">Your School Portal</h3>
+                  <p className="text-sm text-blue-700 mt-1">
+                    Access your school at: <span className="font-mono font-medium">{tenantInfo.domain}.{window.location.host}</span>
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => window.open(`${window.location.protocol}//${tenantInfo.domain}.${window.location.host}`, '_blank')}
-                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm"
+                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm transition-colors flex items-center space-x-2"
               >
-                Open Portal
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+                <span>Open Portal</span>
               </button>
             </div>
           </div>
 
           {/* Unassigned Students Warning */}
           {unassignedStudentsCount > 0 && (
-            <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <div className="mb-6 bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 rounded-lg p-4">
               <div className="flex items-center justify-between">
-                <div className="flex items-center">
+                <div className="flex items-center space-x-3">
                   <div className="flex-shrink-0">
-                    <svg className="h-5 w-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                    </svg>
+                    <div className="w-10 h-10 bg-amber-500 rounded-lg flex items-center justify-center">
+                      <svg className="h-6 w-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                    </div>
                   </div>
-                  <div className="ml-3">
+                  <div>
                     <h3 className="text-sm font-medium text-amber-800">
                       {unassignedStudentsCount} student{unassignedStudentsCount !== 1 ? 's' : ''} {unassignedStudentsCount !== 1 ? 'are' : 'is'} not yet assigned to any class
                     </h3>
@@ -1037,36 +1117,43 @@ const TenantDashboard: React.FC = () => {
                 </div>
                 <button
                   onClick={() => navigate('/students')}
-                  className="bg-amber-600 text-white px-4 py-2 rounded-md hover:bg-amber-700 text-sm"
+                  className="bg-amber-600 text-white px-4 py-2 rounded-md hover:bg-amber-700 text-sm transition-colors flex items-center space-x-2"
                 >
-                  Assign Now
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  <span>Assign Now</span>
                 </button>
               </div>
             </div>
           )}
 
+          {/* Enhanced Module Grid with Better Visual Hierarchy */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Domain & Branding Module */}
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
+            <div className="bg-white overflow-hidden shadow-lg rounded-xl border border-gray-100 hover:shadow-xl transition-shadow">
+              <div className="p-6">
+                <div className="flex items-start space-x-4">
                   <div className="flex-shrink-0">
-                    <div className="w-8 h-8 bg-blue-500 rounded-md flex items-center justify-center">
-                      <span className="text-white font-bold">D</span>
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
+                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                      </svg>
                     </div>
                   </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">Domain & Branding</dt>
-                      <dd className={`text-lg font-medium ${getStatusColor(setupStatus?.modules?.domain_branding?.status || 'setup_required')}`}>
-                        {getStatusText(setupStatus?.modules?.domain_branding?.status || 'setup_required')}
-                      </dd>
-                    </dl>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Domain & Branding</h3>
+                    <div className="mb-3">
+                      {getStatusBadge(setupStatus?.modules?.domain_branding?.status || 'setup_required')}
+                    </div>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Configure your school's domain and customize branding to match your identity.
+                    </p>
                   </div>
-                  <div className="ml-5 flex-shrink-0">
+                  <div className="flex-shrink-0">
                     <button
                       onClick={() => navigate('/domain-and-branding')}
-                      className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+                      className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-md hover:shadow-lg"
                     >
                       Configure
                     </button>
@@ -1076,32 +1163,30 @@ const TenantDashboard: React.FC = () => {
             </div>
 
             {/* Attendance System Module */}
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
+            <div className="bg-white overflow-hidden shadow-lg rounded-xl border border-gray-100 hover:shadow-xl transition-shadow">
+              <div className="p-6">
+                <div className="flex items-start space-x-4">
                   <div className="flex-shrink-0">
-                    <div className="w-8 h-8 bg-purple-500 rounded-md flex items-center justify-center">
-                      <span className="text-white font-bold">A</span>
+                    <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
                     </div>
                   </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">Attendance System</dt>
-                      <dd className={`text-lg font-medium ${getStatusColor(setupStatus?.modules?.attendance?.status || 'locked')}`}>
-                        {getStatusText(setupStatus?.modules?.attendance?.status || 'locked')}
-                      </dd>
-                      {setupStatus?.modules?.attendance?.status === 'locked' && (
-                        <dd className="text-xs text-gray-500 mt-1">
-                          Prerequisites not met
-                        </dd>
-                      )}
-                    </dl>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Attendance System</h3>
+                    <div className="mb-3">
+                      {getStatusBadge(setupStatus?.modules?.attendance?.status || 'locked')}
+                    </div>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Manage student attendance with manual, QR code, or biometric options.
+                    </p>
                   </div>
-                  <div className="ml-5 flex-shrink-0">
+                  <div className="flex-shrink-0">
                     {setupStatus?.modules?.attendance?.available ? (
                       <button
                         onClick={() => navigate('/attendance')}
-                        className="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700"
+                        className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-4 py-2 rounded-lg hover:from-purple-700 hover:to-purple-800 transition-all duration-200 shadow-md hover:shadow-lg"
                       >
                         Configure
                       </button>
@@ -1109,7 +1194,7 @@ const TenantDashboard: React.FC = () => {
                       <div className="relative group">
                         <button
                           disabled
-                          className="bg-gray-400 text-white px-3 py-1 rounded text-sm cursor-not-allowed"
+                          className="bg-gray-400 text-white px-4 py-2 rounded-lg cursor-not-allowed shadow-md"
                           title={getTooltipText('attendance', setupStatus?.modules?.attendance?.prerequisites)}
                         >
                           Configure
@@ -1126,24 +1211,31 @@ const TenantDashboard: React.FC = () => {
             </div>
 
             {/* Student Management Module */}
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
+            <div className="bg-white overflow-hidden shadow-lg rounded-xl border border-gray-100 hover:shadow-xl transition-shadow">
+              <div className="p-6">
+                <div className="flex items-start space-x-4">
                   <div className="flex-shrink-0">
-                    <div className="w-8 h-8 bg-green-500 rounded-md flex items-center justify-center">
-                      <span className="text-white font-bold">S</span>
+                    <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg">
+                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+                      </svg>
                     </div>
                   </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">Student Management</dt>
-                      <dd className="text-lg font-medium text-green-600">Ready to Setup</dd>
-                    </dl>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Student Management</h3>
+                    <div className="mb-3">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        🚀 Ready to Setup
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Add, edit, and manage student profiles with bulk import capabilities.
+                    </p>
                   </div>
-                  <div className="ml-5 flex-shrink-0">
+                  <div className="flex-shrink-0">
                     <button
                       onClick={() => navigate('/students')}
-                      className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700"
+                      className="bg-gradient-to-r from-green-600 to-green-700 text-white px-4 py-2 rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 shadow-md hover:shadow-lg"
                     >
                       Manage Students
                     </button>
@@ -1153,24 +1245,31 @@ const TenantDashboard: React.FC = () => {
             </div>
 
             {/* Class Management Module */}
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
+            <div className="bg-white overflow-hidden shadow-lg rounded-xl border border-gray-100 hover:shadow-xl transition-shadow">
+              <div className="p-6">
+                <div className="flex items-start space-x-4">
                   <div className="flex-shrink-0">
-                    <div className="w-8 h-8 bg-indigo-500 rounded-md flex items-center justify-center">
-                      <span className="text-white font-bold">C</span>
+                    <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
+                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                      </svg>
                     </div>
                   </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">Class Management</dt>
-                      <dd className="text-lg font-medium text-indigo-600">Ready to Setup</dd>
-                    </dl>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Class Management</h3>
+                    <div className="mb-3">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                        🚀 Ready to Setup
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Create and manage classes, sections, and grade levels for your school.
+                    </p>
                   </div>
-                  <div className="ml-5 flex-shrink-0">
+                  <div className="flex-shrink-0">
                     <button
                       onClick={() => navigate('/classes')}
-                      className="bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700"
+                      className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-4 py-2 rounded-lg hover:from-indigo-700 hover:to-indigo-800 transition-all duration-200 shadow-md hover:shadow-lg"
                     >
                       Manage Classes
                     </button>
@@ -1182,26 +1281,56 @@ const TenantDashboard: React.FC = () => {
 
           {/* Prerequisites Status */}
           {setupStatus?.modules?.attendance?.status === 'locked' && (
-            <div className="mt-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <h3 className="text-sm font-medium text-yellow-800 mb-2">Attendance System Prerequisites</h3>
+            <div className="mt-8 bg-gradient-to-r from-yellow-50 to-amber-50 border border-yellow-200 rounded-xl p-6">
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="w-10 h-10 bg-yellow-500 rounded-lg flex items-center justify-center">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-medium text-yellow-800">Attendance System Prerequisites</h3>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="flex items-center space-x-2">
-                  <div className={`w-3 h-3 rounded-full ${setupStatus?.modules?.attendance?.prerequisites?.academic_year ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                  <span className="text-sm text-yellow-700">Academic Year</span>
+                <div className="flex items-center space-x-3 p-3 bg-white rounded-lg border border-yellow-200">
+                  <div className={`w-4 h-4 rounded-full ${setupStatus?.modules?.attendance?.prerequisites?.academic_year ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                  <span className="text-sm font-medium text-gray-700">Academic Year</span>
+                  {setupStatus?.modules?.attendance?.prerequisites?.academic_year ? (
+                    <span className="text-green-600">✅</span>
+                  ) : (
+                    <span className="text-red-600">❌</span>
+                  )}
                 </div>
-                <div className="flex items-center space-x-2">
-                  <div className={`w-3 h-3 rounded-full ${setupStatus?.modules?.attendance?.prerequisites?.classes ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                  <span className="text-sm text-yellow-700">Classes</span>
+                <div className="flex items-center space-x-3 p-3 bg-white rounded-lg border border-yellow-200">
+                  <div className={`w-4 h-4 rounded-full ${setupStatus?.modules?.attendance?.prerequisites?.classes ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                  <span className="text-sm font-medium text-gray-700">Classes</span>
+                  {setupStatus?.modules?.attendance?.prerequisites?.classes ? (
+                    <span className="text-green-600">✅</span>
+                  ) : (
+                    <span className="text-red-600">❌</span>
+                  )}
                 </div>
-                <div className="flex items-center space-x-2">
-                  <div className={`w-3 h-3 rounded-full ${setupStatus?.modules?.attendance?.prerequisites?.students ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                  <span className="text-sm text-yellow-700">Students</span>
+                <div className="flex items-center space-x-3 p-3 bg-white rounded-lg border border-yellow-200">
+                  <div className={`w-4 h-4 rounded-full ${setupStatus?.modules?.attendance?.prerequisites?.students ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                  <span className="text-sm font-medium text-gray-700">Students</span>
+                  {setupStatus?.modules?.attendance?.prerequisites?.students ? (
+                    <span className="text-green-600">✅</span>
+                  ) : (
+                    <span className="text-red-600">❌</span>
+                  )}
                 </div>
               </div>
             </div>
           )}
         </div>
       </div>
+      
+      {/* Click outside to close profile dropdown */}
+      {showProfileDropdown && (
+        <div 
+          className="fixed inset-0 z-10" 
+          onClick={() => setShowProfileDropdown(false)}
+        />
+      )}
     </div>
   );
 };

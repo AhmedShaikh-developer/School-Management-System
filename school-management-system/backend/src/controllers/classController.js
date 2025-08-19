@@ -21,7 +21,7 @@ const getTenantDatabaseName = async (tenantId) => {
 // Get all classes for a tenant
 const getClasses = async (req, res) => {
   try {
-    const { tenantId } = req.params;
+    const { tenantId } = req;
     
     if (!tenantId) {
       return res.status(400).json({
@@ -70,7 +70,8 @@ const getClasses = async (req, res) => {
 // Get a single class by ID
 const getClass = async (req, res) => {
   try {
-    const { tenantId, classId } = req.params;
+    const { tenantId } = req;
+    const { classId } = req.params;
     
     if (!tenantId || !classId) {
       return res.status(400).json({
@@ -126,7 +127,7 @@ const getClass = async (req, res) => {
 // Create a new class
 const createClass = async (req, res) => {
   try {
-    const { tenantId } = req.params;
+    const { tenantId } = req;
     const { class_name, grade_level, section, capacity, academic_year } = req.body;
     
     if (!tenantId || !class_name || !grade_level) {
@@ -181,7 +182,8 @@ const createClass = async (req, res) => {
 // Update an existing class
 const updateClass = async (req, res) => {
   try {
-    const { tenantId, classId } = req.params;
+    const { tenantId } = req;
+    const { classId } = req.params;
     const { class_name, grade_level, section, capacity, academic_year } = req.body;
     
     if (!tenantId || !classId) {
@@ -257,7 +259,8 @@ const updateClass = async (req, res) => {
 // Delete a class (permanent deletion)
 const deleteClass = async (req, res) => {
   try {
-    const { tenantId, classId } = req.params;
+    const { tenantId } = req;
+    const { classId } = req.params;
     
     if (!tenantId || !classId) {
       return res.status(400).json({
@@ -353,7 +356,7 @@ const deleteClass = async (req, res) => {
 // Get classes for dropdown (simplified data)
 const getClassesForDropdown = async (req, res) => {
   try {
-    const { tenantId } = req.params;
+    const { tenantId } = req;
     
     if (!tenantId) {
       return res.status(400).json({

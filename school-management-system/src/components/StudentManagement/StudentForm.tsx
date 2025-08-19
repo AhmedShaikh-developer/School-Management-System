@@ -40,16 +40,22 @@ const StudentForm: React.FC<StudentFormProps> = ({
 
   // Initialize form with student data if editing
   useEffect(() => {
-    if (student) {
-      setFormData({
-        ...student,
-        date_of_birth: student.date_of_birth ? new Date(student.date_of_birth).toISOString().split('T')[0] : null,
-        enrollment_date: student.enrollment_date ? new Date(student.enrollment_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
-      });
-    } else {
+    console.log('🔄 Form initialization - student:', student, 'classes:', classes);
+    
+         if (student) {
+       const initialData = {
+         ...student,
+         date_of_birth: student.date_of_birth ? new Date(student.date_of_birth).toISOString().split('T')[0] : null,
+         enrollment_date: student.enrollment_date ? new Date(student.enrollment_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+       };
+       console.log('📝 Setting initial form data for editing:', initialData);
+       console.log('🎯 Student class_id:', student.class_id, 'type:', typeof student.class_id);
+       setFormData(initialData);
+     } else {
       // Smart defaults for new students
       if (classes.length === 1) {
         // Auto-select if only one class exists
+        console.log('🎯 Auto-selecting single class:', classes[0]);
         setFormData(prev => ({
           ...prev,
           class_id: classes[0].id
@@ -107,6 +113,8 @@ const StudentForm: React.FC<StudentFormProps> = ({
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
 
+    console.log('🔍 validateForm - formData.class_id:', formData.class_id, 'type:', typeof formData.class_id);
+
     if (!formData.first_name.trim()) {
       newErrors.first_name = 'First name is required';
     }
@@ -120,8 +128,13 @@ const StudentForm: React.FC<StudentFormProps> = ({
     }
 
     // Class selection validation - allow "unassigned" as a valid choice
-    if (formData.class_id === undefined || formData.class_id === null) {
+    // For editing existing students, null class_id is valid (means unassigned)
+    // For new students, we require a selection
+    if (formData.class_id === undefined) {
       newErrors.class_id = 'Please select a class or choose "Assign Later"';
+      console.log('❌ Class validation failed - class_id is undefined (new student)');
+    } else {
+      console.log('✅ Class validation passed - class_id is valid:', formData.class_id);
     }
 
     setErrors(newErrors);
@@ -170,7 +183,11 @@ const StudentForm: React.FC<StudentFormProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    console.log('🚀 handleSubmit called - formData:', formData);
+    console.log('🚀 validateForm result:', validateForm());
+    
     if (!validateForm()) {
+      console.log('❌ Form validation failed - errors:', errors);
       toast.error('Please fix the errors in the form');
       return;
     }
@@ -179,9 +196,18 @@ const StudentForm: React.FC<StudentFormProps> = ({
     
     try {
       // Prepare data for submission
+      let processedClassId: number | null = null;
+      if (formData.class_id && formData.class_id !== 'unassigned') {
+        if (typeof formData.class_id === 'number') {
+          processedClassId = formData.class_id;
+        } else if (formData.class_id !== '') {
+          processedClassId = Number(formData.class_id);
+        }
+      }
+      
       const submitData = {
         ...formData,
-        class_id: formData.class_id === 'unassigned' ? null : formData.class_id
+        class_id: processedClassId
       };
 
       console.log('Form data before submission:', formData);
@@ -405,7 +431,7 @@ const StudentForm: React.FC<StudentFormProps> = ({
                 <label className="block text-sm font-medium text-gray-700">Class Assignment *</label>
                 <select
                   name="class_id"
-                  value={formData.class_id || ''}
+                  value={formData.class_id === null ? 'unassigned' : (formData.class_id || '')}
                   onChange={handleInputChange}
                   className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 ${
                     errors.class_id ? 'border-red-500' : ''

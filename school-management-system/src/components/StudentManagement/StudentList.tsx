@@ -131,7 +131,7 @@ const StudentList: React.FC<StudentListProps> = ({
               <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Enrollment
               </th>
-              <th className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[200px]">
                 Actions
               </th>
             </tr>
@@ -181,46 +181,60 @@ const StudentList: React.FC<StudentListProps> = ({
                   {formatDate(student.enrollment_date || undefined)}
                 </td>
                 <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <div className="flex justify-end space-x-2">
+                  <div className="flex flex-wrap justify-end gap-1 sm:gap-2">
+                    {/* View Details button */}
+                    <button
+                      onClick={() => onEdit(student)}
+                      className="inline-flex items-center px-2 py-1 text-xs font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 hover:border-gray-400 transition-colors"
+                      title="View student details"
+                    >
+                      <EyeIcon className="h-3 w-3 sm:mr-1" />
+                      <span className="hidden md:inline">View</span>
+                    </button>
+                    
                     {/* Assign Class button for unassigned students */}
                     {!student.class_id && (
                       <button
                         onClick={() => onAssignClass(student)}
-                        className="text-green-600 hover:text-green-900 p-1 rounded"
-                        title="Assign class"
+                        className="inline-flex items-center px-2 py-1 text-xs font-medium text-green-700 bg-green-100 border border-green-300 rounded-md hover:bg-green-200 hover:border-green-400 transition-colors"
+                        title="Assign class to this student"
                       >
-                        <AcademicCapIcon className="h-4 w-4" />
+                        <AcademicCapIcon className="h-3 w-3 sm:mr-1" />
+                        <span className="hidden md:inline">Assign Class</span>
                       </button>
                     )}
                     
                     <button
                       onClick={() => onEdit(student)}
-                      className="text-blue-600 hover:text-blue-900 p-1 rounded"
-                      title="Edit student"
+                      className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-700 bg-blue-100 border border-blue-300 rounded-md hover:bg-blue-200 hover:border-blue-400 transition-colors"
+                      title="Edit student information"
                     >
-                      <PencilIcon className="h-4 w-4" />
+                      <PencilIcon className="h-3 w-3 sm:mr-1" />
+                      <span className="hidden md:inline">Edit</span>
                     </button>
                     
                     <button
                       onClick={() => student.id && onTransfer(student.id)}
-                      className="text-yellow-600 hover:text-yellow-900 p-1 rounded"
-                      title="Transfer student"
+                      className="inline-flex items-center px-2 py-1 text-xs font-medium text-yellow-700 bg-yellow-100 border border-yellow-300 rounded-md hover:bg-yellow-200 hover:border-yellow-400 transition-colors"
+                      title="Transfer student to another class"
                       disabled={!student.id}
                     >
-                      <ArrowRightIcon className="h-4 w-4" />
+                      <ArrowRightIcon className="h-3 w-3 sm:mr-1" />
+                      <span className="hidden md:inline">Transfer</span>
                     </button>
                     
                     <button
                       onClick={() => student.id && handleDelete(student.id)}
                       disabled={deletingStudent === student.id || !student.id}
-                      className="text-red-600 hover:text-red-900 p-1 rounded disabled:opacity-50"
-                      title="Delete student"
+                      className="inline-flex items-center px-2 py-1 text-xs font-medium text-red-700 bg-red-100 border border-red-300 rounded-md hover:bg-red-200 hover:border-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Delete this student"
                     >
                       {deletingStudent === student.id ? (
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
+                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-red-600 sm:mr-1"></div>
                       ) : (
-                        <TrashIcon className="h-4 w-4" />
+                        <TrashIcon className="h-3 w-3 sm:mr-1" />
                       )}
+                      <span className="hidden md:inline">Delete</span>
                     </button>
                   </div>
                 </td>

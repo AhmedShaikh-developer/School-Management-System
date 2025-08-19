@@ -19,28 +19,28 @@ router.get('/', (req, res) => {
   const tenantId = req.tenant.tenant_id;
   console.log('🔍 GET /classes - Tenant ID:', tenantId);
   console.log('🔍 req.tenant:', req.tenant);
-  req.params.tenantId = tenantId;
+  req.tenantId = tenantId;
   getClasses(req, res);
 });
 
 // Get a specific class by ID
 router.get('/:classId', (req, res) => {
   const tenantId = req.tenant.tenant_id;
-  req.params.tenantId = tenantId;
+  req.tenantId = tenantId;
   getClass(req, res);
 });
 
 // Create a new class
 router.post('/', (req, res) => {
   const tenantId = req.tenant.tenant_id;
-  req.params.tenantId = tenantId;
+  req.tenantId = tenantId;
   createClass(req, res);
 });
 
 // Update an existing class
 router.put('/:classId', (req, res) => {
   const tenantId = req.tenant.tenant_id;
-  req.params.tenantId = tenantId;
+  req.tenantId = tenantId;
   updateClass(req, res);
 });
 
@@ -50,14 +50,14 @@ router.delete('/:classId', (req, res) => {
   console.log('🗑️ DELETE /classes/:classId - Tenant ID:', tenantId);
   console.log('🗑️ Class ID:', req.params.classId);
   console.log('🗑️ req.tenant:', req.tenant);
-  req.params.tenantId = tenantId;
+  req.tenantId = tenantId;
   deleteClass(req, res);
 });
 
 // Get classes for dropdown (used in forms)
 router.get('/dropdown/list', (req, res) => {
   const tenantId = req.tenant.tenant_id;
-  req.params.tenantId = tenantId;
+  req.tenantId = tenantId;
   getClassesForDropdown(req, res);
 });
 
