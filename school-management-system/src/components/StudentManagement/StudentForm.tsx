@@ -16,7 +16,7 @@ const StudentForm: React.FC<StudentFormProps> = ({
     last_name: '',
     email: '',
     phone: '',
-    date_of_birth: '',
+    date_of_birth: null,
     gender: '',
     address: '',
     class_id: undefined,
@@ -33,7 +33,7 @@ const StudentForm: React.FC<StudentFormProps> = ({
     previous_school: ''
   });
   
-  const [errors, setErrors] = useState<Partial<Student>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [lastSavedData, setLastSavedData] = useState<string>('');
@@ -43,11 +43,20 @@ const StudentForm: React.FC<StudentFormProps> = ({
     if (student) {
       setFormData({
         ...student,
-        date_of_birth: student.date_of_birth ? new Date(student.date_of_birth).toISOString().split('T')[0] : '',
+        date_of_birth: student.date_of_birth ? new Date(student.date_of_birth).toISOString().split('T')[0] : null,
         enrollment_date: student.enrollment_date ? new Date(student.enrollment_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
       });
+    } else {
+      // Smart defaults for new students
+      if (classes.length === 1) {
+        // Auto-select if only one class exists
+        setFormData(prev => ({
+          ...prev,
+          class_id: classes[0].id
+        }));
+      }
     }
-  }, [student]);
+  }, [student, classes]);
 
   // Auto-save functionality
   const autoSave = useCallback(async (data: Student) => {
@@ -59,7 +68,7 @@ const StudentForm: React.FC<StudentFormProps> = ({
     setAutoSaveStatus('saving');
     
     try {
-      const url = student ? `/api/students/${student.id}` : '/api/students';
+      const url = student ? `http://localhost:5000/api/students/${student.id}` : 'http://localhost:5000/api/students';
       const method = student ? 'PUT' : 'POST';
       
       const response = await fetch(url, {
@@ -96,7 +105,7 @@ const StudentForm: React.FC<StudentFormProps> = ({
   }, [formData, autoSave]);
 
   const validateForm = (): boolean => {
-    const newErrors: Partial<Student> = {};
+    const newErrors: Record<string, string> = {};
 
     if (!formData.first_name.trim()) {
       newErrors.first_name = 'First name is required';
@@ -110,23 +119,51 @@ const StudentForm: React.FC<StudentFormProps> = ({
       newErrors.email = 'Invalid email format';
     }
 
+    // Class selection validation - allow "unassigned" as a valid choice
+    if (formData.class_id === undefined || formData.class_id === null) {
+      newErrors.class_id = 'Please select a class or choose "Assign Later"';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    
+    // Handle special case for "Assign Later" option
+    if (name === 'class_id') {
+      if (value === 'unassigned') {
+        setFormData(prev => ({
+          ...prev,
+          [name]: 'unassigned'
+        }));
+      } else {
+        setFormData(prev => ({
+          ...prev,
+          [name]: value ? parseInt(value) : undefined
+        }));
+      }
+    } else if (name === 'date_of_birth' || name === 'enrollment_date') {
+      // Handle date fields - convert empty strings to null
+      setFormData(prev => ({
+        ...prev,
+        [name]: value && value.trim() !== '' ? value : null
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [name]: value
+      }));
+    }
     
     // Clear error when user starts typing
-    if (errors[name as keyof Student]) {
-      setErrors(prev => ({
-        ...prev,
-        [name]: undefined
-      }));
+    if (errors[name]) {
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[name];
+        return newErrors;
+      });
     }
   };
 
@@ -141,8 +178,19 @@ const StudentForm: React.FC<StudentFormProps> = ({
     setLoading(true);
     
     try {
-      const url = student ? `/api/students/${student.id}` : '/api/students';
+      // Prepare data for submission
+      const submitData = {
+        ...formData,
+        class_id: formData.class_id === 'unassigned' ? null : formData.class_id
+      };
+
+      console.log('Form data before submission:', formData);
+      console.log('Submit data after processing:', submitData);
+
+      const url = student ? `http://localhost:5000/api/students/${student.id}` : 'http://localhost:5000/api/students';
       const method = student ? 'PUT' : 'POST';
+      
+      console.log('Making request to:', url, 'with method:', method);
       
       const response = await fetch(url, {
         method,
@@ -150,15 +198,20 @@ const StudentForm: React.FC<StudentFormProps> = ({
           'Authorization': `Bearer ${tenantToken}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(submitData)
       });
+
+      console.log('Response status:', response.status);
+      console.log('Response ok:', response.ok);
 
       if (response.ok) {
         const result = await response.json();
+        console.log('Success response:', result);
         onSuccess(result.data);
         toast.success(student ? 'Student updated successfully!' : 'Student created successfully!');
       } else {
         const error = await response.json();
+        console.error('Error response:', error);
         toast.error(error.error || 'Failed to save student');
       }
     } catch (error) {
@@ -197,14 +250,36 @@ const StudentForm: React.FC<StudentFormProps> = ({
     }
   };
 
+  const getClassSelectionHelp = () => {
+    if (classes.length === 0) {
+      return (
+        <div className="text-sm text-amber-600 bg-amber-50 p-2 rounded-md border border-amber-200">
+          ⚠️ No classes have been created yet. Please create classes first or choose "Assign Later".
+        </div>
+      );
+    }
+    if (classes.length === 1) {
+      return (
+        <div className="text-sm text-blue-600 bg-blue-50 p-2 rounded-md border border-blue-200">
+          ℹ️ Only one class available. Students will be automatically assigned to {classes[0].class_name}.
+        </div>
+      );
+    }
+    return (
+      <div className="text-sm text-gray-600 bg-gray-50 p-2 rounded-md border border-gray-200">
+        ℹ️ Select a class for the student or choose "Assign Later" to assign them later.
+      </div>
+    );
+  };
+
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-      <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-4xl shadow-lg rounded-md bg-white">
-        <div className="flex justify-between items-center mb-6">
+      <div className="relative top-4 sm:top-20 mx-auto p-3 sm:p-5 border w-11/12 max-w-4xl shadow-lg rounded-md bg-white">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
           <h3 className="text-lg font-medium text-gray-900">
             {student ? 'Edit Student' : 'Add New Student'}
           </h3>
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-4 w-full sm:w-auto">
             {getAutoSaveIndicator()}
             <button
               onClick={onClose}
@@ -215,11 +290,11 @@ const StudentForm: React.FC<StudentFormProps> = ({
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
           {/* Basic Information */}
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h4 className="text-md font-medium text-gray-900 mb-4">Basic Information</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-gray-50 p-3 sm:p-4 rounded-lg">
+            <h4 className="text-md font-medium text-gray-900 mb-3 sm:mb-4">Basic Information</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">First Name *</label>
                 <input
@@ -284,7 +359,7 @@ const StudentForm: React.FC<StudentFormProps> = ({
                 <input
                   type="date"
                   name="date_of_birth"
-                  value={formData.date_of_birth}
+                  value={formData.date_of_birth || ''}
                   onChange={handleInputChange}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                 />
@@ -319,16 +394,22 @@ const StudentForm: React.FC<StudentFormProps> = ({
           </div>
 
           {/* Academic Information */}
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h4 className="text-md font-medium text-gray-900 mb-4">Academic Information</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-gray-50 p-3 sm:p-4 rounded-lg">
+            <h4 className="text-md font-medium text-gray-900 mb-3 sm:mb-4">Academic Information</h4>
+            
+            {/* Class Selection Help */}
+            {getClassSelectionHelp()}
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Class</label>
+                <label className="block text-sm font-medium text-gray-700">Class Assignment *</label>
                 <select
                   name="class_id"
                   value={formData.class_id || ''}
                   onChange={handleInputChange}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 ${
+                    errors.class_id ? 'border-red-500' : ''
+                  }`}
                 >
                   <option value="">Select class</option>
                   {classes.map(cls => (
@@ -336,7 +417,14 @@ const StudentForm: React.FC<StudentFormProps> = ({
                       {cls.class_name} (Grade {cls.grade_level})
                     </option>
                   ))}
+                  <option value="unassigned">📋 Assign Later</option>
                 </select>
+                {errors.class_id && (
+                  <p className="mt-1 text-sm text-red-600">{errors.class_id}</p>
+                )}
+                <p className="mt-1 text-xs text-gray-500">
+                  Students assigned later will appear in the "Unassigned" section until placed in a class.
+                </p>
               </div>
 
               <div>
@@ -344,12 +432,14 @@ const StudentForm: React.FC<StudentFormProps> = ({
                 <input
                   type="date"
                   name="enrollment_date"
-                  value={formData.enrollment_date}
+                  value={formData.enrollment_date || ''}
                   onChange={handleInputChange}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                 />
               </div>
+            </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Previous School</label>
                 <input
@@ -375,9 +465,9 @@ const StudentForm: React.FC<StudentFormProps> = ({
           </div>
 
           {/* Emergency Contact */}
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h4 className="text-md font-medium text-gray-900 mb-4">Emergency Contact</h4>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-gray-50 p-3 sm:p-4 rounded-lg">
+            <h4 className="text-md font-medium text-gray-900 mb-3 sm:mb-4">Emergency Contact</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Contact Name</label>
                 <input
@@ -414,9 +504,9 @@ const StudentForm: React.FC<StudentFormProps> = ({
           </div>
 
           {/* Medical Information */}
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h4 className="text-md font-medium text-gray-900 mb-4">Medical Information</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-gray-50 p-3 sm:p-4 rounded-lg">
+            <h4 className="text-md font-medium text-gray-900 mb-3 sm:mb-4">Medical Information</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Blood Group</label>
                 <select
@@ -460,7 +550,7 @@ const StudentForm: React.FC<StudentFormProps> = ({
               </div>
             </div>
 
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Medical Conditions</label>
                 <textarea
@@ -488,7 +578,7 @@ const StudentForm: React.FC<StudentFormProps> = ({
           </div>
 
           {/* Form Actions */}
-          <div className="flex justify-end space-x-3 pt-6 border-t">
+          <div className="flex flex-col sm:flex-row justify-end space-y-3 sm:space-y-0 sm:space-x-3 pt-6 border-t">
             <button
               type="button"
               onClick={onClose}

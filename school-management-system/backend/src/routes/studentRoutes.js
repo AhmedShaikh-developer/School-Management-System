@@ -11,7 +11,8 @@ const {
   bulkImportStudents,
   transferStudent,
   generateStudentIdCard,
-  upload
+  upload,
+  csvUpload
 } = require('../controllers/studentController');
 
 // Apply authentication middleware to all routes
@@ -44,15 +45,27 @@ router.delete('/:studentId', (req, res) => {
 });
 
 // Document management
-router.post('/:studentId/documents', upload.array('documents', 5), uploadDocuments);
+router.post('/:studentId/documents', upload.array('documents', 5), (req, res) => {
+  req.tenantId = req.tenant.tenant_id;
+  uploadDocuments(req, res);
+});
 
 // Bulk operations
-router.post('/bulk-import', upload.single('csv_file'), bulkImportStudents);
+router.post('/bulk-import', csvUpload.single('csv_file'), (req, res) => {
+  req.tenantId = req.tenant.tenant_id;
+  bulkImportStudents(req, res);
+});
 
 // Student transfers
-router.post('/:studentId/transfer', transferStudent);
+router.post('/:studentId/transfer', (req, res) => {
+  req.tenantId = req.tenant.tenant_id;
+  transferStudent(req, res);
+});
 
 // ID card generation
-router.get('/:studentId/id-card', generateStudentIdCard);
+router.get('/:studentId/id-card', (req, res) => {
+  req.tenantId = req.tenant.tenant_id;
+  generateStudentIdCard(req, res);
+});
 
 module.exports = router;

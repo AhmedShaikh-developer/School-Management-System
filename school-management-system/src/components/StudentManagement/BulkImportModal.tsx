@@ -56,7 +56,7 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({ onClose, onSuccess })
         });
       }, 200);
 
-      const response = await fetch('/api/students/bulk-import', {
+      const response = await fetch('http://localhost:5000/api/students/bulk-import', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${tenantToken}`
@@ -72,10 +72,15 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({ onClose, onSuccess })
         setImportResults(result.data);
         setShowResults(true);
         
-        // Auto-close after 5 seconds if successful
+        // Call onSuccess immediately to refresh the student list
+        onSuccess(result.data);
+        
+        // Auto-close after 5 seconds if completely successful
         setTimeout(() => {
           if (result.data.failed_imports === 0) {
-            onSuccess(result.data);
+            setShowResults(false);
+            setFile(null);
+            setImportResults(null);
           }
         }, 5000);
         
@@ -107,8 +112,9 @@ const BulkImportModal: React.FC<BulkImportModalProps> = ({ onClose, onSuccess })
 
   const downloadTemplate = () => {
     const csvContent = `first_name,last_name,email,phone,date_of_birth,gender,address,class_id,enrollment_date,emergency_contact_name,emergency_contact_phone,emergency_contact_relationship,medical_conditions,allergies,blood_group,nationality,religion,mother_tongue,previous_school
-John,Doe,john.doe@example.com,+1234567890,2005-01-15,male,123 Main St,1,2024-09-01,Jane Doe,+1234567891,Mother,None,None,A+,American,Christian,English,Previous School Name
-Jane,Smith,jane.smith@example.com,+1234567892,2005-03-20,female,456 Oak Ave,1,2024-09-01,John Smith,+1234567893,Father,None,None,B+,American,Christian,English,`;
+John,Doe,john.doe@example.com,+1234567890,2005-01-15,male,123 Main St,,2024-09-01,Jane Doe,+1234567891,Mother,None,None,A+,American,Christian,English,Previous School Name
+Jane,Smith,jane.smith@example.com,+1234567892,2005-03-20,female,456 Oak Ave,,2024-09-01,John Smith,+1234567893,Father,None,None,B+,American,Christian,English,
+Mike,Johnson,mike.johnson@example.com,+1234567894,2005-06-10,male,789 Pine Rd,,2024-09-01,Mary Johnson,+1234567895,Mother,None,None,O+,American,Christian,English,`;
     
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -233,6 +239,7 @@ Jane,Smith,jane.smith@example.com,+1234567892,2005-03-20,female,456 Oak Ave,1,20
               <li>• Upload a CSV file with student information</li>
               <li>• First row should contain column headers</li>
               <li>• Required fields: first_name, last_name, email</li>
+              <li>• Class assignment is optional - leave class_id empty to assign later</li>
               <li>• Maximum file size: 10MB</li>
               <li>• Supported formats: CSV only</li>
             </ul>

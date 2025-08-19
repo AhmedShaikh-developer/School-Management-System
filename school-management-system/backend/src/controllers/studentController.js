@@ -58,39 +58,84 @@ const upload = multer({
   }
 });
 
+// Separate multer instance for CSV uploads
+const csvUpload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit for CSV files
+    files: 1 // Only one CSV file per request
+  },
+  fileFilter: (req, file, cb) => {
+    // Allow CSV files
+    if (file.mimetype === 'text/csv' || file.originalname.toLowerCase().endsWith('.csv')) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Only CSV files are allowed for bulk import'));
+    }
+  }
+});
+
 // Get all students with pagination and search
 const getStudents = async (req, res) => {
   try {
     const { tenantId } = req;
     const { page = 1, limit = 20, search = '', class_id, status = 'active' } = req.query;
     
+    console.log('getStudents called with:', { tenantId, page, limit, search, class_id, status });
+    
     const tenantDbName = await getTenantDatabaseName(tenantId);
+    console.log('Tenant database name:', tenantDbName);
+    
     const tenantPool = createTenantPool(tenantId, tenantDbName);
     const client = await tenantPool.connect();
     
     try {
-      let whereClause = 'WHERE status = $1';
-      let params = [status];
-      let paramCount = 1;
+      // Build where clause for filtering
+      let whereClause = 'WHERE s.status != \'deleted\'';
+      let params = [];
+      let paramCount = 0;
       
       if (search) {
         paramCount++;
-        whereClause += ` AND (first_name ILIKE $${paramCount} OR last_name ILIKE $${paramCount} OR student_id ILIKE $${paramCount} OR email ILIKE $${paramCount})`;
+        whereClause += ` AND (s.first_name ILIKE $${paramCount} OR s.last_name ILIKE $${paramCount} OR s.student_id ILIKE $${paramCount} OR s.email ILIKE $${paramCount})`;
         params.push(`%${search}%`);
       }
       
       if (class_id) {
         paramCount++;
-        whereClause += ` AND class_id = $${paramCount}`;
-        params.push(class_id);
+        if (class_id === 'unassigned') {
+          whereClause += ` AND s.class_id IS NULL`;
+          console.log('Filtering for unassigned students (class_id IS NULL)');
+        } else {
+          whereClause += ` AND s.class_id = $${paramCount}`;
+          params.push(class_id);
+          console.log(`Filtering for class_id = ${class_id}`);
+        }
+      } else {
+        console.log('No class filter applied - showing all classes');
       }
       
-      // Get total count
-      const countQuery = `SELECT COUNT(*) FROM students ${whereClause}`;
+      // Add status filter
+      if (status && status !== 'all') {
+        paramCount++;
+        whereClause += ` AND s.status = $${paramCount}`;
+        params.push(status);
+        console.log(`Filtering for status = ${status}`);
+      } else {
+        console.log('No status filter applied - showing all statuses');
+      }
+      
+      console.log('Final where clause:', whereClause);
+      console.log('Final params:', params);
+      
+      // Get total count with proper filtering
+      const countQuery = `SELECT COUNT(DISTINCT s.id) FROM students s ${whereClause}`;
+      console.log('Count query:', countQuery);
       const countResult = await client.query(countQuery, params);
       const totalStudents = parseInt(countResult.rows[0].count);
+      console.log('Total students found:', totalStudents);
       
-      // Get students with pagination
+      // Get students with pagination - simple approach to prevent duplicates
       paramCount++;
       const offset = (page - 1) * limit;
       const studentsQuery = `
@@ -102,7 +147,48 @@ const getStudents = async (req, res) => {
         LIMIT $${paramCount} OFFSET $${paramCount + 1}
       `;
       
+      console.log('Students query:', studentsQuery);
+      console.log('Query params:', [...params, limit, offset]);
+      
       const studentsResult = await client.query(studentsQuery, [...params, limit, offset]);
+      console.log('Students result rows:', studentsResult.rows.length);
+      console.log('First few students:', studentsResult.rows.slice(0, 3));
+      
+      // Debug: Show all students with their class info
+      console.log('\n=== ALL RETURNED STUDENTS ===');
+      studentsResult.rows.forEach((student, index) => {
+        console.log(`${index + 1}. ID: ${student.id}, Name: ${student.first_name} ${student.last_name}, Class ID: ${student.class_id}, Class Name: ${student.class_name}, Grade: ${student.grade_level}, Status: ${student.status}`);
+      });
+      
+      // Verify no duplicates in results
+      const studentIds = studentsResult.rows.map(s => s.id);
+      const uniqueIds = [...new Set(studentIds)];
+      if (studentIds.length !== uniqueIds.length) {
+        console.warn('Duplicate students detected in results!');
+        console.warn('Total rows:', studentIds.length, 'Unique IDs:', uniqueIds.length);
+        
+        // Find the duplicates
+        const duplicates = studentIds.filter((id, index) => studentIds.indexOf(id) !== index);
+        console.warn('Duplicate IDs:', [...new Set(duplicates)]);
+      } else {
+        console.log('No duplicate students in results');
+      }
+      
+      // Additional debug: Check what the filter should have returned
+      if (class_id === 'unassigned') {
+        console.log('\n=== DEBUGGING UNASSIGNED FILTER ===');
+        const unassignedCheck = await client.query(`
+          SELECT COUNT(*) as count FROM students s 
+          WHERE s.status != 'deleted' AND s.class_id IS NULL
+        `);
+        console.log(`Total unassigned students in database: ${unassignedCheck.rows[0].count}`);
+        
+        const assignedCheck = await client.query(`
+          SELECT COUNT(*) as count FROM students s 
+          WHERE s.status != 'deleted' AND s.class_id IS NOT NULL
+        `);
+        console.log(`Total assigned students in database: ${assignedCheck.rows[0].count}`);
+      }
       
       res.json({
         success: true,
@@ -193,6 +279,8 @@ const createStudent = async (req, res) => {
     const { tenantId } = req;
     const studentData = req.body;
     
+    console.log('Creating student with data:', studentData);
+    
     const tenantDbName = await getTenantDatabaseName(tenantId);
     const tenantPool = createTenantPool(tenantId, tenantDbName);
     const client = await tenantPool.connect();
@@ -203,6 +291,17 @@ const createStudent = async (req, res) => {
       // Generate unique student ID
       const studentId = await generateUniqueStudentId(client, studentData.school_prefix || 'STU');
       
+      // Clean up date fields - convert empty strings to null
+      const cleanDateOfBirth = studentData.date_of_birth && studentData.date_of_birth.trim() !== '' 
+        ? studentData.date_of_birth 
+        : null;
+      
+      const cleanEnrollmentDate = studentData.enrollment_date && studentData.enrollment_date.trim() !== '' 
+        ? studentData.enrollment_date 
+        : new Date();
+      
+      console.log('Cleaned date fields:', { cleanDateOfBirth, cleanEnrollmentDate });
+      
       // Insert student
       const result = await client.query(`
         INSERT INTO students (
@@ -212,12 +311,14 @@ const createStudent = async (req, res) => {
         RETURNING *
       `, [
         studentId, studentData.first_name, studentData.last_name, studentData.email,
-        studentData.phone, studentData.date_of_birth, studentData.gender,
-        studentData.address, studentData.parent_id, studentData.class_id,
-        studentData.enrollment_date || new Date(), 'active'
+        studentData.phone || null, cleanDateOfBirth, studentData.gender || null,
+        studentData.address || null, studentData.parent_id || null, studentData.class_id || null,
+        cleanEnrollmentDate, 'active'
       ]);
       
       await client.query('COMMIT');
+      
+      console.log('Student created successfully:', result.rows[0]);
       
       res.status(201).json({
         success: true,
@@ -250,6 +351,8 @@ const updateStudent = async (req, res) => {
     const { studentId } = req.params;
     const updateData = req.body;
     
+    console.log('Updating student with data:', updateData);
+    
     const tenantDbName = await getTenantDatabaseName(tenantId);
     const tenantPool = createTenantPool(tenantId, tenantDbName);
     const client = await tenantPool.connect();
@@ -267,6 +370,21 @@ const updateStudent = async (req, res) => {
           error: 'Student not found'
         });
       }
+      
+      // Clean up date fields - convert empty strings to null
+      if (updateData.date_of_birth !== undefined) {
+        updateData.date_of_birth = updateData.date_of_birth && updateData.date_of_birth.trim() !== '' 
+          ? updateData.date_of_birth 
+          : null;
+      }
+      
+      if (updateData.enrollment_date !== undefined) {
+        updateData.enrollment_date = updateData.enrollment_date && updateData.enrollment_date.trim() !== '' 
+          ? updateData.enrollment_date 
+          : null;
+      }
+      
+      console.log('Cleaned update data:', updateData);
       
       // Build update query dynamically
       const updateFields = [];
@@ -299,7 +417,12 @@ const updateStudent = async (req, res) => {
         RETURNING *
       `;
       
+      console.log('Update query:', updateQuery);
+      console.log('Update values:', values);
+      
       const result = await client.query(updateQuery, values);
+      
+      console.log('Student updated successfully:', result.rows[0]);
       
       res.json({
         success: true,
@@ -451,6 +574,9 @@ const bulkImportStudents = async (req, res) => {
   try {
     const { tenantId } = req;
     
+    console.log('Bulk import started for tenant:', tenantId);
+    console.log('Uploaded file:', req.file);
+    
     if (!req.file) {
       return res.status(400).json({
         success: false,
@@ -459,6 +585,8 @@ const bulkImportStudents = async (req, res) => {
     }
     
     const tenantDbName = await getTenantDatabaseName(tenantId);
+    console.log('Tenant database name:', tenantDbName);
+    
     const tenantPool = createTenantPool(tenantId, tenantDbName);
     const client = await tenantPool.connect();
     
@@ -470,115 +598,204 @@ const bulkImportStudents = async (req, res) => {
       let successCount = 0;
       let errorCount = 0;
       
-      // Parse CSV file
+      // Parse CSV file synchronously
       const csvData = [];
-      fs.createReadStream(req.file.path)
-        .pipe(csv())
-        .on('data', (row) => csvData.push(row))
-        .on('end', async () => {
-          try {
-            for (let i = 0; i < csvData.length; i++) {
-              const row = csvData[i];
-              const rowNumber = i + 2; // +2 because CSV starts at row 2 (1 is header)
+      
+      console.log('Starting CSV parsing...');
+      
+      // Create a promise-based CSV parsing
+      const parseCSV = () => {
+        return new Promise((resolve, reject) => {
+          const stream = fs.createReadStream(req.file.path);
+          
+          stream.on('error', (error) => {
+            console.error('File read error:', error);
+            reject(error);
+          });
+          
+          stream.pipe(csv())
+            .on('data', (row) => {
+              console.log('Parsed row:', row);
+              csvData.push(row);
+            })
+            .on('end', () => {
+              console.log('CSV parsing completed. Total rows:', csvData.length);
+              resolve();
+            })
+            .on('error', (error) => {
+              console.error('CSV parsing error:', error);
+              reject(error);
+            });
+        });
+      };
+      
+      // Parse CSV first
+      await parseCSV();
+      
+      console.log('Processing', csvData.length, 'rows...');
+      
+      // Check if CSV has data
+      if (csvData.length === 0) {
+        throw new Error('CSV file appears to be empty or contains no valid data rows');
+      }
+      
+      // Validate CSV structure by checking first row
+      const firstRow = csvData[0];
+      const requiredFields = ['first_name', 'last_name', 'email'];
+      const missingFields = requiredFields.filter(field => !firstRow[field]);
+      
+      if (missingFields.length > 0) {
+        throw new Error(`CSV file is missing required columns: ${missingFields.join(', ')}. Please use the provided template.`);
+      }
+      
+      // Process each row
+      for (let i = 0; i < csvData.length; i++) {
+        const row = csvData[i];
+        const rowNumber = i + 2; // +2 because CSV starts at row 2 (1 is header)
+        
+        console.log(`Processing row ${rowNumber}:`, row);
+        
+        try {
+          // Validate required fields
+          if (!row.first_name || !row.last_name || !row.email) {
+            const errorMsg = 'Missing required fields: first_name, last_name, or email';
+            console.log(`Row ${rowNumber} validation failed:`, errorMsg);
+            errors.push({
+              row: rowNumber,
+              error: errorMsg
+            });
+            errorCount++;
+            continue;
+          }
+          
+          // Validate email format
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(row.email)) {
+            const errorMsg = 'Invalid email format';
+            console.log(`Row ${rowNumber} validation failed:`, errorMsg);
+            errors.push({
+              row: rowNumber,
+              error: errorMsg
+            });
+            errorCount++;
+            continue;
+          }
+          
+          // Check for duplicate email
+          const existingEmail = await client.query(
+            'SELECT id FROM students WHERE email = $1 AND status != $2',
+            [row.email, 'deleted']
+          );
+          
+          if (existingEmail.rows.length > 0) {
+            const errorMsg = 'Email already exists';
+            console.log(`Row ${rowNumber} validation failed:`, errorMsg);
+            errors.push({
+              row: rowNumber,
+              error: errorMsg
+            });
+            errorCount++;
+            continue;
+          }
+          
+          // Validate class_id if provided
+          let classId = null;
+          if (row.class_id && row.class_id.trim() !== '') {
+            try {
+              const classCheck = await client.query(
+                'SELECT id FROM classes WHERE id = $1',
+                [row.class_id]
+              );
               
-              try {
-                // Validate required fields
-                if (!row.first_name || !row.last_name || !row.email) {
-                  errors.push({
-                    row: rowNumber,
-                    error: 'Missing required fields: first_name, last_name, or email'
-                  });
-                  errorCount++;
-                  continue;
-                }
-                
-                // Validate email format
-                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                if (!emailRegex.test(row.email)) {
-                  errors.push({
-                    row: rowNumber,
-                    error: 'Invalid email format'
-                  });
-                  errorCount++;
-                  continue;
-                }
-                
-                // Check for duplicate email
-                const existingEmail = await client.query(
-                  'SELECT id FROM students WHERE email = $1 AND status != $2',
-                  [row.email, 'deleted']
-                );
-                
-                if (existingEmail.rows.length > 0) {
-                  errors.push({
-                    row: rowNumber,
-                    error: 'Email already exists'
-                  });
-                  errorCount++;
-                  continue;
-                }
-                
-                // Generate unique student ID
-                const studentId = await generateUniqueStudentId(client, row.school_prefix || 'STU');
-                
-                // Insert student
-                const result = await client.query(`
-                  INSERT INTO students (
-                    student_id, first_name, last_name, email, phone, date_of_birth,
-                    gender, address, class_id, enrollment_date, status
-                  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-                  RETURNING *
-                `, [
-                  studentId, row.first_name, row.last_name, row.email,
-                  row.phone || null, row.date_of_birth || null, row.gender || null,
-                  row.address || null, row.class_id || null,
-                  row.enrollment_date || new Date(), 'active'
-                ]);
-                
-                results.push({
-                  row: rowNumber,
-                  student: result.rows[0],
-                  status: 'success'
-                });
-                successCount++;
-                
-              } catch (rowError) {
+              if (classCheck.rows.length === 0) {
+                const errorMsg = `Invalid class_id: ${row.class_id}. Class does not exist.`;
+                console.log(`Row ${rowNumber} validation failed:`, errorMsg);
                 errors.push({
                   row: rowNumber,
-                  error: rowError.message
+                  error: errorMsg
                 });
                 errorCount++;
+                continue;
               }
+              
+              classId = parseInt(row.class_id);
+            } catch (parseError) {
+              const errorMsg = `Invalid class_id format: ${row.class_id}. Must be a number.`;
+              console.log(`Row ${rowNumber} validation failed:`, errorMsg);
+              errors.push({
+                row: rowNumber,
+                error: errorMsg
+              });
+              errorCount++;
+              continue;
             }
-            
-            await client.query('COMMIT');
-            
-            // Clean up uploaded file
-            fs.unlinkSync(req.file.path);
-            
-            res.json({
-              success: true,
-              data: {
-                total_rows: csvData.length,
-                successful_imports: successCount,
-                failed_imports: errorCount,
-                results: results,
-                errors: errors
-              },
-              message: `Bulk import completed. ${successCount} students imported successfully, ${errorCount} failed.`
-            });
-            
-          } catch (parseError) {
-            await client.query('ROLLBACK');
-            throw parseError;
           }
-        })
-        .on('error', async (error) => {
-          await client.query('ROLLBACK');
-          throw error;
-        });
-        
+          // If classId is still null, student will be created without class assignment
+          
+          // Generate unique student ID
+          const studentId = await generateUniqueStudentId(client, row.school_prefix || 'STU');
+          console.log(`Generated student ID for row ${rowNumber}:`, studentId);
+          
+          // Insert student
+          const result = await client.query(`
+            INSERT INTO students (
+              student_id, first_name, last_name, email, phone, date_of_birth,
+              gender, address, class_id, enrollment_date, status
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            RETURNING *
+          `, [
+            studentId, row.first_name, row.last_name, row.email,
+            row.phone || null, row.date_of_birth || null, row.gender || null,
+            row.address || null, classId,
+            row.enrollment_date || new Date(), 'active'
+          ]);
+          
+          console.log(`Row ${rowNumber} inserted successfully:`, result.rows[0]);
+          
+          results.push({
+            row: rowNumber,
+            student: result.rows[0],
+            status: 'success'
+          });
+          successCount++;
+          
+        } catch (rowError) {
+          console.error(`Error processing row ${rowNumber}:`, rowError);
+          errors.push({
+            row: rowNumber,
+            error: rowError.message
+          });
+          errorCount++;
+        }
+      }
+      
+      console.log('All rows processed. Committing transaction...');
+      await client.query('COMMIT');
+      
+      // Clean up uploaded file
+      if (fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+        console.log('Uploaded file cleaned up');
+      }
+      
+      const responseData = {
+        total_rows: csvData.length,
+        successful_imports: successCount,
+        failed_imports: errorCount,
+        results: results,
+        errors: errors
+      };
+      
+      console.log('Bulk import completed successfully:', responseData);
+      
+      res.json({
+        success: true,
+        data: responseData,
+        message: `Bulk import completed. ${successCount} students imported successfully, ${errorCount} failed.`
+      });
+      
     } catch (error) {
+      console.error('Database transaction error:', error);
       await client.query('ROLLBACK');
       throw error;
     } finally {
@@ -800,5 +1017,6 @@ module.exports = {
   bulkImportStudents,
   transferStudent,
   generateStudentIdCard,
-  upload // Export multer instance for routes
+  upload, // Export multer instance for routes
+  csvUpload // Export CSV multer instance for bulk import
 };

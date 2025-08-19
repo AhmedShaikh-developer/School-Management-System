@@ -5,12 +5,12 @@ export interface Student {
   last_name: string;
   email: string;
   phone?: string;
-  date_of_birth?: string;
+  date_of_birth?: string | null;
   gender?: string;
   address?: string;
   parent_id?: number;
-  class_id?: number;
-  enrollment_date?: string;
+  class_id?: number | null | 'unassigned';
+  enrollment_date?: string | null;
   status?: string;
   class_name?: string;
   grade_level?: string;
@@ -39,6 +39,7 @@ export interface StudentListProps {
   onEdit: (student: Student) => void;
   onDelete: (studentId: number) => void;
   onTransfer: (studentId: number) => void;
+  onAssignClass: (student: Student) => void;
 }
 
 export interface StudentFormProps {

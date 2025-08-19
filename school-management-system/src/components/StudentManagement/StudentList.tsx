@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PencilIcon, TrashIcon, ArrowRightIcon, EyeIcon, DocumentIcon } from '@heroicons/react/24/outline';
+import { PencilIcon, TrashIcon, ArrowRightIcon, EyeIcon, DocumentIcon, AcademicCapIcon } from '@heroicons/react/24/outline';
 import { toast } from 'react-toastify';
 import { Student, StudentListProps } from '../../types/student';
 
@@ -10,7 +10,8 @@ const StudentList: React.FC<StudentListProps> = ({
   onPageChange,
   onEdit,
   onDelete,
-  onTransfer
+  onTransfer,
+  onAssignClass
 }) => {
   const [deletingStudent, setDeletingStudent] = useState<number | null>(null);
 
@@ -21,7 +22,7 @@ const StudentList: React.FC<StudentListProps> = ({
 
     setDeletingStudent(studentId);
     try {
-      const response = await fetch(`/api/students/${studentId}`, {
+      const response = await fetch(`http://localhost:5000/api/students/${studentId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('tenantToken')}`,
@@ -97,8 +98,8 @@ const StudentList: React.FC<StudentListProps> = ({
   return (
     <div className="bg-white rounded-lg shadow overflow-hidden">
       {/* Table Header */}
-      <div className="px-6 py-4 border-b border-gray-200">
-        <div className="flex justify-between items-center">
+      <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0">
           <h3 className="text-lg font-medium text-gray-900">
             Students ({pagination.total_students})
           </h3>
@@ -115,22 +116,22 @@ const StudentList: React.FC<StudentListProps> = ({
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Student
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Contact
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Class
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Status
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Enrollment
               </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Actions
               </th>
             </tr>
@@ -138,32 +139,32 @@ const StudentList: React.FC<StudentListProps> = ({
           <tbody className="bg-white divide-y divide-gray-200">
             {students.map((student) => (
               <tr key={student.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap">
+                <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                   <div className="flex items-center">
-                    <div className="flex-shrink-0 h-10 w-10">
-                      <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
-                        <span className="text-sm font-medium text-blue-600">
+                    <div className="flex-shrink-0 h-8 w-8 sm:h-10 sm:w-10">
+                      <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                        <span className="text-xs sm:text-sm font-medium text-blue-600">
                           {student.first_name?.charAt(0) || ''}{student.last_name?.charAt(0) || ''}
                         </span>
                       </div>
                     </div>
-                    <div className="ml-4">
+                    <div className="ml-2 sm:ml-4">
                       <div className="text-sm font-medium text-gray-900">
                         {student.first_name || ''} {student.last_name || ''}
                       </div>
-                      <div className="text-sm text-gray-500">
+                      <div className="text-xs sm:text-sm text-gray-500">
                         ID: {student.student_id || 'N/A'}
                       </div>
                     </div>
                   </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
+                <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                   <div className="text-sm text-gray-900">{student.email}</div>
                   {student.phone && (
                     <div className="text-sm text-gray-500">{student.phone}</div>
                   )}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
+                <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                   {student.class_name ? (
                     <div>
                       <div className="text-sm text-gray-900">{student.class_name}</div>
@@ -173,14 +174,25 @@ const StudentList: React.FC<StudentListProps> = ({
                     <span className="text-sm text-gray-400">Not Assigned</span>
                   )}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
+                <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                   {getStatusBadge(student.status || 'inactive')}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {formatDate(student.enrollment_date || undefined)}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                   <div className="flex justify-end space-x-2">
+                    {/* Assign Class button for unassigned students */}
+                    {!student.class_id && (
+                      <button
+                        onClick={() => onAssignClass(student)}
+                        className="text-green-600 hover:text-green-900 p-1 rounded"
+                        title="Assign class"
+                      >
+                        <AcademicCapIcon className="h-4 w-4" />
+                      </button>
+                    )}
+                    
                     <button
                       onClick={() => onEdit(student)}
                       className="text-blue-600 hover:text-blue-900 p-1 rounded"
@@ -188,6 +200,7 @@ const StudentList: React.FC<StudentListProps> = ({
                     >
                       <PencilIcon className="h-4 w-4" />
                     </button>
+                    
                     <button
                       onClick={() => student.id && onTransfer(student.id)}
                       className="text-yellow-600 hover:text-yellow-900 p-1 rounded"
@@ -196,6 +209,7 @@ const StudentList: React.FC<StudentListProps> = ({
                     >
                       <ArrowRightIcon className="h-4 w-4" />
                     </button>
+                    
                     <button
                       onClick={() => student.id && handleDelete(student.id)}
                       disabled={deletingStudent === student.id || !student.id}
