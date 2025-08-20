@@ -107,7 +107,7 @@ const getStudents = async (req, res) => {
     
     try {
       // Build where clause for filtering
-      let whereClause = 'WHERE s.status != \'deleted\'';
+      let whereClause = 'WHERE 1=1'; // No status filtering since we use hard delete
       let params = [];
       let paramCount = 0;
       
@@ -131,21 +131,15 @@ const getStudents = async (req, res) => {
         console.log('No class filter applied - showing all classes');
       }
       
-      // Add status filter
-      if (status && status !== 'all' && status !== 'undefined') {
-        paramCount++;
-        whereClause += ` AND s.status = $${paramCount}`;
-        params.push(status);
-        console.log(`Filtering for status = ${status}`);
-      } else {
-        console.log('No status filter applied - showing all statuses');
-      }
+      // Status filter removed - all students are active since we use hard delete
+      console.log('No status filter applied - all students are active');
       
       console.log('Final where clause:', whereClause);
       console.log('Final params:', params);
       
       // Get total count with proper filtering
-      const countQuery = `SELECT COUNT(DISTINCT s.id) FROM students s ${whereClause}`;
+      // Use a separate count query without JOINs to avoid counting issues
+      const countQuery = `SELECT COUNT(*) FROM students s ${whereClause}`;
       console.log('Count query:', countQuery);
       
       let totalStudents = 0;
@@ -171,6 +165,13 @@ const getStudents = async (req, res) => {
         ORDER BY s.last_name, s.first_name
         LIMIT $${paramCount} OFFSET $${paramCount + 1}
       `;
+      
+      // For unassigned students, we need to be extra careful with the count
+      if (class_id === 'unassigned') {
+        console.log('🔍 Special handling for unassigned students count');
+        console.log('Where clause:', whereClause);
+        console.log('Params:', params);
+      }
       
       console.log('Students query:', studentsQuery);
       console.log('Query params:', [...params, limit, offset]);
@@ -203,26 +204,51 @@ const getStudents = async (req, res) => {
         // Additional debug: Check what the filter should have returned
         if (class_id === 'unassigned') {
           console.log('\n=== DEBUGGING UNASSIGNED FILTER ===');
+          console.log('Query params for unassigned filter:', params);
+          console.log('Where clause for unassigned filter:', whereClause);
+          
           const unassignedCheck = await client.query(`
             SELECT COUNT(*) as count FROM students s 
-            WHERE s.status != 'deleted' AND s.class_id IS NULL
+            WHERE s.class_id IS NULL
           `);
           console.log(`Total unassigned students in database: ${unassignedCheck.rows[0].count}`);
           
           const assignedCheck = await client.query(`
             SELECT COUNT(*) as count FROM students s 
-            WHERE s.status != 'deleted' AND s.class_id IS NOT NULL
+            WHERE s.class_id IS NOT NULL
           `);
           console.log(`Total assigned students in database: ${assignedCheck.rows[0].count}`);
           
           // Show the actual unassigned students
           const unassignedStudents = await client.query(`
-            SELECT s.id, s.first_name, s.last_name, s.class_id, s.status
+            SELECT s.id, s.first_name, s.last_name, s.class_id
             FROM students s 
-            WHERE s.status != 'deleted' AND s.class_id IS NULL
+            WHERE s.class_id IS NULL
             ORDER BY s.id
           `);
           console.log('Unassigned students found:', unassignedStudents.rows);
+          
+          // Debug the count query result
+          console.log(`Count query result: ${totalStudents} students`);
+          console.log(`Expected: ${unassignedCheck.rows[0].count} students`);
+          if (totalStudents !== parseInt(unassignedCheck.rows[0].count)) {
+            console.warn('⚠️ COUNT MISMATCH! Count query returned different result than expected');
+            
+            // Check for students with unexpected status values
+            const statusCheck = await client.query(`
+              SELECT DISTINCT status, COUNT(*) as count 
+              FROM students s 
+              WHERE s.class_id IS NULL
+              GROUP BY status
+              ORDER BY status
+            `);
+            console.log('Status breakdown for unassigned students:', statusCheck.rows);
+            
+            // Also check the raw count query that was executed
+            console.log('🔍 Executing the actual count query to debug...');
+            const debugCount = await client.query(`SELECT COUNT(*) FROM students s ${whereClause}`, params);
+            console.log(`Debug count query result: ${debugCount.rows[0].count}`);
+          }
         } else if (!class_id) {
           console.log('\n=== DEBUGGING ALL CLASSES FILTER ===');
           const totalCheck = await client.query(`
@@ -361,24 +387,36 @@ const createStudent = async (req, res) => {
         ? studentData.enrollment_date 
         : new Date();
       
+      console.log('🔍 Student creation - class_id processing:');
+      console.log('  - Raw studentData.class_id:', studentData.class_id, 'type:', typeof studentData.class_id);
+      console.log('  - Processed class_id:', studentData.class_id || null, 'type:', typeof (studentData.class_id || null));
       console.log('Cleaned date fields:', { cleanDateOfBirth, cleanEnrollmentDate });
       
       // Insert student
+      const insertValues = [
+        studentId, studentData.first_name, studentData.last_name, studentData.email,
+        studentData.phone || null, cleanDateOfBirth, studentData.gender || null,
+        studentData.address || null, studentData.parent_id || null, studentData.class_id || null,
+        cleanEnrollmentDate, 'active'
+      ];
+      
+      console.log('🔍 Insert query values:');
+      console.log('  - class_id value (position 9):', insertValues[9], 'type:', typeof insertValues[9]);
+      console.log('  - All values:', insertValues);
+      
       const result = await client.query(`
         INSERT INTO students (
           student_id, first_name, last_name, email, phone, date_of_birth, 
           gender, address, parent_id, class_id, enrollment_date, status
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING *
-      `, [
-        studentId, studentData.first_name, studentData.last_name, studentData.email,
-        studentData.phone || null, cleanDateOfBirth, studentData.gender || null,
-        studentData.address || null, studentData.parent_id || null, studentData.class_id || null,
-        cleanEnrollmentDate, 'active'
-      ]);
+      `, insertValues);
       
       await client.query('COMMIT');
       
+      console.log('🔍 Student creation result:');
+      console.log('  - Created student data:', result.rows[0]);
+      console.log('  - Final class_id in database:', result.rows[0].class_id, 'type:', typeof result.rows[0].class_id);
       console.log('Student created successfully:', result.rows[0]);
       
       res.status(201).json({
@@ -456,31 +494,53 @@ const updateStudent = async (req, res) => {
        
        // Handle class_id field - convert to integer or null
        if (updateData.class_id !== undefined) {
+         console.log('🔍 Backend processing class_id:');
+         console.log('  - Raw updateData.class_id:', updateData.class_id, 'type:', typeof updateData.class_id);
+         
          if (updateData.class_id === '' || updateData.class_id === 'null' || updateData.class_id === null) {
+           console.log('  - Setting class_id to null (empty/null value)');
            updateData.class_id = null;
          } else {
            const classId = parseInt(updateData.class_id);
+           console.log('  - Parsed classId:', classId, 'type:', typeof classId);
+           
            if (isNaN(classId)) {
+             console.log('  - ❌ Invalid class ID format - returning error');
              return res.status(400).json({
                success: false,
                error: 'Invalid class ID format'
              });
            }
+           
+           console.log('  - ✅ Valid class ID, setting updateData.class_id to:', classId);
            updateData.class_id = classId;
            
-           // Verify that the class exists
-           const classExists = await client.query(
-             'SELECT id FROM classes WHERE id = $1 AND status = $2',
-             [classId, 'active']
-           );
-           
-           if (classExists.rows.length === 0) {
-             return res.status(400).json({
-               success: false,
-               error: 'Selected class does not exist or is not active'
-             });
-           }
+                                 // Verify that the class exists
+                      console.log('  - 🔍 Verifying class exists in database...');
+                      console.log('  - Query: SELECT id FROM classes WHERE id = $1 AND status = $2');
+                      console.log('  - Parameters: classId =', classId, ', status = active');
+                      
+                      const classExists = await client.query(
+                        'SELECT id FROM classes WHERE id = $1 AND status = $2',
+                        [classId, 'active']
+                      );
+                      
+                      console.log('  - Class verification result:', classExists.rows);
+                      console.log('  - Row count:', classExists.rows.length);
+                      
+                      if (classExists.rows.length === 0) {
+                        console.log('  - ❌ Class does not exist or is not active - returning error');
+                        return res.status(400).json({
+                          success: false,
+                          error: 'Selected class does not exist or is not active'
+                        });
+                      }
+                      
+                      console.log('  - ✅ Class verified successfully');
+                      console.log('  - Verified class ID:', classExists.rows[0].id, 'type:', typeof classExists.rows[0].id);
          }
+       } else {
+         console.log('  - class_id not provided in update data');
        }
        
        console.log('Cleaned update data:', updateData);
@@ -488,6 +548,9 @@ const updateStudent = async (req, res) => {
        console.log('Fields being updated:', Object.keys(updateData).filter(key => allowedFields.includes(key)));
        
        // Build update query dynamically - only update allowed fields
+      console.log('🔍 Building update query:');
+      console.log('  - updateData keys:', Object.keys(updateData));
+      console.log('  - allowedFields:', allowedFields);
       
       const updateFields = [];
       const values = [];
@@ -495,11 +558,17 @@ const updateStudent = async (req, res) => {
       
       Object.keys(updateData).forEach(key => {
         if (allowedFields.includes(key) && updateData[key] !== undefined) {
+          console.log(`  - Adding field: ${key} = $${paramCount} with value:`, updateData[key], 'type:', typeof updateData[key]);
           updateFields.push(`${key} = $${paramCount}`);
           values.push(updateData[key]);
           paramCount++;
+        } else {
+          console.log(`  - Skipping field: ${key} (allowed: ${allowedFields.includes(key)}, defined: ${updateData[key] !== undefined})`);
         }
       });
+      
+      console.log('  - Final updateFields:', updateFields);
+      console.log('  - Final values array:', values);
       
       if (updateFields.length === 0) {
         return res.status(400).json({
@@ -519,13 +588,37 @@ const updateStudent = async (req, res) => {
         RETURNING *
       `;
       
-      console.log('Update query:', updateQuery);
-      console.log('Update values:', values);
-      console.log('Final class_id value:', updateData.class_id);
+      console.log('🔍 Final update execution:');
+      console.log('  - Update query:', updateQuery);
+      console.log('  - Update values:', values);
+      console.log('  - Final class_id value in updateData:', updateData.class_id, 'type:', typeof updateData.class_id);
+      
+      // Find the class_id value in the values array
+      const classIdIndex = updateFields.findIndex(field => field.includes('class_id'));
+      if (classIdIndex !== -1) {
+        console.log('  - class_id found at index:', classIdIndex, 'in updateFields');
+        console.log('  - class_id value in values array:', values[classIdIndex], 'type:', typeof values[classIdIndex]);
+        console.log('  - class_id field name:', updateFields[classIdIndex]);
+      } else {
+        console.log('  - class_id not found in updateFields');
+      }
       
       const result = await client.query(updateQuery, values);
       
-             console.log('Student updated successfully:', result.rows[0]);
+      console.log('🔍 Update result:');
+      console.log('  - Updated student data:', result.rows[0]);
+      console.log('  - Final class_id in database:', result.rows[0].class_id, 'type:', typeof result.rows[0].class_id);
+      
+      // Double-check what's actually in the database
+      console.log('  - 🔍 Verifying database value...');
+      const verifyQuery = await client.query(
+        'SELECT id, first_name, last_name, class_id FROM students WHERE id = $1',
+        [studentId]
+      );
+      console.log('  - Verification query result:', verifyQuery.rows[0]);
+      console.log('  - Verified class_id in database:', verifyQuery.rows[0].class_id, 'type:', typeof verifyQuery.rows[0].class_id);
+      
+      console.log('Student updated successfully:', result.rows[0]);
        console.log('Sending response with status 200');
        console.log('Response data being sent:', {
          success: true,
@@ -555,7 +648,7 @@ const updateStudent = async (req, res) => {
    }
 };
 
-// Delete student (soft delete)
+// Delete student (hard delete)
 const deleteStudent = async (req, res) => {
   try {
     const { tenantId } = req;
@@ -566,12 +659,24 @@ const deleteStudent = async (req, res) => {
     const client = await tenantPool.connect();
     
     try {
-      const result = await client.query(`
-        UPDATE students 
-        SET status = 'deleted', updated_at = CURRENT_TIMESTAMP
-        WHERE id = $1
-        RETURNING *
-      `, [studentId]);
+      // First check if student exists
+      const checkResult = await client.query(
+        'SELECT id, first_name, last_name FROM students WHERE id = $1',
+        [studentId]
+      );
+      
+      if (checkResult.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'Student not found'
+        });
+      }
+      
+      // Hard delete the student
+      const result = await client.query(
+        'DELETE FROM students WHERE id = $1 RETURNING *',
+        [studentId]
+      );
       
       if (result.rows.length === 0) {
         return res.status(404).json({
@@ -582,7 +687,7 @@ const deleteStudent = async (req, res) => {
       
       res.json({
         success: true,
-        message: 'Student deleted successfully'
+        message: 'Student permanently deleted successfully'
       });
       
     } finally {
@@ -743,6 +848,13 @@ const bulkImportStudents = async (req, res) => {
       await parseCSV();
       
       console.log('Processing', csvData.length, 'rows...');
+      console.log('🔍 Raw CSV data:');
+      csvData.forEach((row, index) => {
+        console.log(`  Row ${index + 1}:`, row);
+        console.log(`    - class_id: "${row.class_id}" (type: ${typeof row.class_id})`);
+        console.log(`    - class_id truthy: ${!!row.class_id}`);
+        console.log(`    - class_id length: ${row.class_id ? row.class_id.length : 'N/A'}`);
+      });
       
       // Check if CSV has data
       if (csvData.length === 0) {
@@ -810,7 +922,20 @@ const bulkImportStudents = async (req, res) => {
           
           // Validate class_id if provided
           let classId = null;
-          if (row.class_id && row.class_id.trim() !== '') {
+          console.log(`🔍 Row ${rowNumber} class_id processing:`);
+          console.log(`  - Raw row.class_id: "${row.class_id}" (type: ${typeof row.class_id})`);
+          console.log(`  - row.class_id truthy check: ${!!row.class_id}`);
+          console.log(`  - row.class_id length: ${row.class_id ? row.class_id.length : 'N/A'}`);
+          
+          // Check if class_id is actually a meaningful value (not null, empty, or "null" string)
+          const isClassIdValid = row.class_id && 
+                                row.class_id.trim() !== '' && 
+                                row.class_id.toLowerCase() !== 'null' &&
+                                row.class_id.toLowerCase() !== 'n/a' &&
+                                row.class_id.toLowerCase() !== 'none';
+          
+          if (isClassIdValid) {
+            console.log(`  - class_id provided, processing...`);
             try {
               const classCheck = await client.query(
                 'SELECT id FROM classes WHERE id = $1',
@@ -829,6 +954,7 @@ const bulkImportStudents = async (req, res) => {
               }
               
               classId = parseInt(row.class_id);
+              console.log(`  - ✅ Valid class_id set to: ${classId} (type: ${typeof classId})`);
             } catch (parseError) {
               const errorMsg = `Invalid class_id format: ${row.class_id}. Must be a number.`;
               console.log(`Row ${rowNumber} validation failed:`, errorMsg);
@@ -839,12 +965,25 @@ const bulkImportStudents = async (req, res) => {
               errorCount++;
               continue;
             }
+          } else {
+            console.log(`  - ✅ class_id is empty/null/"null"/"n/a"/"none", setting to null (unassigned)`);
+            console.log(`  - Raw value: "${row.class_id}"`);
           }
           // If classId is still null, student will be created without class assignment
           
           // Generate unique student ID
           const studentId = await generateUniqueStudentId(client, row.school_prefix || 'STU');
           console.log(`Generated student ID for row ${rowNumber}:`, studentId);
+          
+          // Debug insert values
+          console.log(`🔍 Row ${rowNumber} insert values:`);
+          console.log(`  - class_id value: ${classId} (type: ${typeof classId})`);
+          console.log(`  - All insert values:`, [
+            studentId, row.first_name, row.last_name, row.email,
+            row.phone || null, row.date_of_birth || null, row.gender || null,
+            row.address || null, classId,
+            row.enrollment_date || new Date(), 'active'
+          ]);
           
           // Insert student
           const result = await client.query(`
@@ -861,6 +1000,9 @@ const bulkImportStudents = async (req, res) => {
           ]);
           
           console.log(`Row ${rowNumber} inserted successfully:`, result.rows[0]);
+          console.log(`🔍 Row ${rowNumber} final result:`);
+          console.log(`  - Inserted class_id: ${result.rows[0].class_id} (type: ${typeof result.rows[0].class_id})`);
+          console.log(`  - Full inserted student:`, result.rows[0]);
           
           results.push({
             row: rowNumber,

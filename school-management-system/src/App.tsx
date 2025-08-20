@@ -873,6 +873,15 @@ const TenantDashboard: React.FC = () => {
     const fetchUnassignedStudentsCount = async () => {
       if (!tenantId) return;
       
+      // Prevent multiple calls in quick succession
+      if ((window as any).unassignedCountFetching) {
+        console.log('🚫 Unassigned count fetch already in progress, skipping...');
+        return;
+      }
+      
+      (window as any).unassignedCountFetching = true;
+      console.log('🔄 Fetching unassigned students count...');
+      
       try {
         const response = await fetch(`http://localhost:5000/api/students?status=all&class_id=unassigned&limit=1`, {
           headers: {
@@ -883,15 +892,26 @@ const TenantDashboard: React.FC = () => {
         
         if (response.ok) {
           const data = await response.json();
+          console.log('📊 Unassigned students API response:', data);
           if (data.success) {
-            setUnassignedStudentsCount(data.data.pagination.total_students);
+            const count = data.data.pagination.total_students;
+            console.log(`🎯 Setting unassigned count to: ${count}`);
+            setUnassignedStudentsCount(count);
           }
+        } else {
+          console.error('❌ API response not ok:', response.status, response.statusText);
         }
       } catch (error) {
         console.error('Error fetching unassigned students count:', error);
+      } finally {
+        // Clear the flag after a delay to prevent rapid successive calls
+        setTimeout(() => {
+          (window as any).unassignedCountFetching = false;
+        }, 1000);
       }
     };
 
+    console.log('🚀 App useEffect triggered - fetching setup status and unassigned count');
     fetchSetupStatus();
     fetchUnassignedStudentsCount();
   }, [tenantId]);
@@ -1094,39 +1114,7 @@ const TenantDashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* Unassigned Students Warning */}
-          {unassignedStudentsCount > 0 && (
-            <div className="mb-6 bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="flex-shrink-0">
-                    <div className="w-10 h-10 bg-amber-500 rounded-lg flex items-center justify-center">
-                      <svg className="h-6 w-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-medium text-amber-800">
-                      {unassignedStudentsCount} student{unassignedStudentsCount !== 1 ? 's' : ''} {unassignedStudentsCount !== 1 ? 'are' : 'is'} not yet assigned to any class
-                    </h3>
-                    <p className="text-sm text-amber-700 mt-1">
-                      These students were imported without class assignments and need to be placed in appropriate classes.
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => navigate('/students')}
-                  className="bg-amber-600 text-white px-4 py-2 rounded-md hover:bg-amber-700 text-sm transition-colors flex items-center space-x-2"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                  <span>Assign Now</span>
-                </button>
-              </div>
-            </div>
-          )}
+
 
           {/* Enhanced Module Grid with Better Visual Hierarchy */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

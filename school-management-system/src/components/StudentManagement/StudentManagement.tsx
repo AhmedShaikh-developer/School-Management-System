@@ -27,13 +27,13 @@ const StudentManagement: React.FC = () => {
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [assigningStudent, setAssigningStudent] = useState<Student | null>(null);
   const [classes, setClasses] = useState<Array<{ id: number; class_name: string; grade_level: string }>>([]);
-  const [pagination, setPagination] = useState({
-    current_page: 1,
-    total_pages: 1,
-    total_students: 0,
-    limit: 20,
-    status: 'active'
-  });
+     const [pagination, setPagination] = useState({
+     current_page: 1,
+     total_pages: 1,
+     total_students: 0,
+     limit: 20,
+     status: 'active' // Always active since we use hard delete
+   });
 
   // Debug selectedClass changes
   useEffect(() => {
@@ -49,6 +49,9 @@ const StudentManagement: React.FC = () => {
 
   // Fetch students with auto-retry and offline support
   const fetchStudents = useCallback(async (page = 1, retryCount = 0) => {
+    console.log(`🔄 fetchStudents called - page: ${page}, retryCount: ${retryCount}`);
+    console.log(`🔄 Current state: searchTerm: "${searchTerm}", selectedClass: "${selectedClass}", status: "${pagination.status}"`);
+    
     try {
       setLoading(true);
       
@@ -93,6 +96,15 @@ const StudentManagement: React.FC = () => {
       console.log('Students response:', data);
       
       if (data.success) {
+        console.log('🔍 Students data received:');
+        console.log('  - Total students:', data.data.students.length);
+        console.log('  - Pagination:', data.data.pagination);
+        
+        // Debug each student's class_id
+        data.data.students.forEach((student: any, index: number) => {
+          console.log(`  - Student ${index + 1}: ${student.first_name} ${student.last_name} - class_id: ${student.class_id} (type: ${typeof student.class_id})`);
+        });
+        
         console.log('Setting students:', data.data.students);
         console.log('Setting pagination:', data.data.pagination);
         
@@ -113,6 +125,7 @@ const StudentManagement: React.FC = () => {
           }
         }
         
+        console.log('🔍 Setting students state with:', data.data.students);
         setStudents(data.data.students);
         setPagination(data.data.pagination);
       } else {
@@ -153,12 +166,32 @@ const StudentManagement: React.FC = () => {
       if (response.ok) {
         const data = await response.json();
         console.log('Classes response data:', data);
-        if (data.success) {
-          console.log('Setting classes:', data.data);
-          setClasses(data.data);
-        } else {
-          console.error('Classes API returned success: false:', data);
-        }
+                               if (data.success) {
+                  console.log('🔍 Classes fetched successfully:');
+                  console.log('  - Raw classes data:', data.data);
+                  console.log('  - Classes array length:', data.data.length);
+                  data.data.forEach((cls: any, index: number) => {
+                    console.log(`  - Class ${index + 1}: ID=${cls.id} (type: ${typeof cls.id}), Name="${cls.class_name}", Grade="${cls.grade_level}"`);
+                    console.log(`    Raw class object:`, cls);
+                    console.log(`    JSON.stringify:`, JSON.stringify(cls, null, 2));
+                    
+                    // Check if there are any type conversion issues
+                    if (typeof cls.id !== 'number') {
+                      console.warn(`⚠️ Class ${index + 1} has non-numeric ID:`, cls.id, 'type:', typeof cls.id);
+                    }
+                    
+                    // Check for potential ID mismatches
+                    if (cls.class_name && cls.class_name.includes('Class ')) {
+                      const expectedId = cls.class_name.replace('Class ', '');
+                      if (cls.id.toString() !== expectedId) {
+                        console.warn(`⚠️ POTENTIAL ID MISMATCH: Class name "${cls.class_name}" suggests ID should be ${expectedId}, but actual ID is ${cls.id}`);
+                      }
+                    }
+                  });
+                  setClasses(data.data);
+                } else {
+                  console.error('Classes API returned success: false:', data);
+                }
       } else {
         console.error('Classes API error status:', response.status);
         const errorText = await response.text();
@@ -171,16 +204,26 @@ const StudentManagement: React.FC = () => {
 
   // Initial data fetch
   useEffect(() => {
+    console.log('🚀 Initial data fetch useEffect triggered');
     fetchStudents();
     fetchClasses();
   }, []); // Only run once on mount
 
+  // Monitor students state changes
+  useEffect(() => {
+    console.log('🔍 Students state changed:');
+    console.log('  - Total students:', students.length);
+    students.forEach((student, index) => {
+      console.log(`  - Student ${index + 1}: ${student.first_name} ${student.last_name} - class_id: ${student.class_id} (type: ${typeof student.class_id})`);
+    });
+  }, [students]);
+
   // Debounced search - only trigger when search term changes
   useEffect(() => {
     if (searchTerm !== '') {
-      console.log('Search effect triggered:', { searchTerm });
+      console.log('🔍 Search effect triggered:', { searchTerm });
       const timer = setTimeout(() => {
-        console.log('Executing search with:', { searchTerm });
+        console.log('🔍 Executing search with:', { searchTerm });
         fetchStudents(1);
       }, 500);
 
@@ -190,9 +233,27 @@ const StudentManagement: React.FC = () => {
 
   // Class filter effect - trigger immediately when class filter changes
   useEffect(() => {
-    console.log('Class filter effect triggered:', selectedClass);
+    console.log('🎯 Class filter effect triggered:', selectedClass);
+    console.log('  - selectedClass type:', typeof selectedClass);
+    console.log('  - selectedClass value:', selectedClass);
+    console.log('  - selectedClass truthy check:', !!selectedClass);
+    
+    // Debug: Show which class this corresponds to
+    if (selectedClass && selectedClass !== 'unassigned') {
+      const selectedClassObj = classes.find(c => c.id.toString() === selectedClass);
+      console.log('  - Corresponding class object:', selectedClassObj);
+      if (selectedClassObj) {
+        console.log('  - Class ID:', selectedClassObj.id, 'type:', typeof selectedClassObj.id);
+        console.log('  - Class Name:', selectedClassObj.class_name);
+        console.log('  - Grade Level:', selectedClassObj.grade_level);
+      } else {
+        console.warn('  - ⚠️ No class object found for selectedClass:', selectedClass);
+        console.log('  - Available classes:', classes.map(c => ({ id: c.id, name: c.class_name })));
+      }
+    }
+    
     fetchStudents(1);
-  }, [selectedClass]); // Only depend on selectedClass
+  }, [selectedClass, classes]); // Added classes dependency to access it in the effect
 
   // Aggressive logo and branding removal
   useEffect(() => {
@@ -278,17 +339,32 @@ const StudentManagement: React.FC = () => {
   };
 
   const handleStudentCreated = (newStudent: Student) => {
+    console.log('🎯 handleStudentCreated called with:', newStudent);
+    console.log('  - Full newStudent object:', newStudent);
+    console.log('  - newStudent.class_id:', newStudent.class_id, 'type:', typeof newStudent.class_id);
+    console.log('  - JSON.stringify(newStudent):', JSON.stringify(newStudent, null, 2));
+    
     const studentWithStatus = { ...newStudent, status: 'active' };
+    console.log('🎯 Adding student to local state:', studentWithStatus);
+    console.log('  - studentWithStatus.class_id:', studentWithStatus.class_id, 'type:', typeof studentWithStatus.class_id);
+    
     setStudents(prev => [studentWithStatus, ...prev]);
     setShowForm(false);
     toast.success('Student created successfully!');
+    console.log('🎯 Student creation completed successfully');
   };
 
   const handleStudentUpdated = (updatedStudent: Student) => {
+    console.log('🎯 handleStudentUpdated called with:', updatedStudent);
+    console.log('  - Full updatedStudent object:', updatedStudent);
+    console.log('  - updatedStudent.class_id:', updatedStudent.class_id, 'type:', typeof updatedStudent.class_id);
+    console.log('  - JSON.stringify(updatedStudent):', JSON.stringify(updatedStudent, null, 2));
+    
     setStudents(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s));
     setShowForm(false);
     setEditingStudent(null);
     toast.success('Student updated successfully!');
+    console.log('🎯 Student update completed successfully');
   };
 
   const handleStudentDeleted = (studentId: number) => {
@@ -310,14 +386,14 @@ const StudentManagement: React.FC = () => {
     fetchStudents(1);
   };
 
-  const resetFilters = () => {
-    console.log('Resetting filters');
-    setSearchTerm('');
-    setSelectedClass('');
-    setPagination(prev => ({ ...prev, status: 'active' }));
-    // Fetch students without filters
-    fetchStudents(1);
-  };
+     const resetFilters = () => {
+     console.log('Resetting filters');
+     setSearchTerm('');
+     setSelectedClass('');
+     // Status is always 'active' since we use hard delete
+     // Fetch students without filters
+     fetchStudents(1);
+   };
 
   const manualRefresh = () => {
     console.log('Manual refresh clicked');
@@ -375,19 +451,71 @@ const StudentManagement: React.FC = () => {
         </div>
       </div>
 
+      {/* Unassigned Students Summary */}
+      {(() => {
+        const unassignedCount = students.filter(s => s.class_id === null).length;
+        return unassignedCount > 0 ? (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="flex-shrink-0">
+                    <div className="w-10 h-10 bg-amber-500 rounded-lg flex items-center justify-center">
+                      <svg className="h-6 w-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium text-amber-800">
+                      {unassignedCount} student{unassignedCount !== 1 ? 's' : ''} {unassignedCount !== 1 ? 'are' : 'is'} not yet assigned to any class
+                    </h3>
+                    <p className="text-sm text-amber-700 mt-1">
+                      These students were imported without class assignments and need to be placed in appropriate classes.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedClass('unassigned')}
+                  className="bg-amber-600 text-white px-4 py-2 rounded-md hover:bg-amber-700 text-sm transition-colors flex items-center space-x-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  <span>View Unassigned</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null;
+      })()}
+
       {/* Search and Filters */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
         <div className="bg-white rounded-lg shadow p-4 sm:p-6 mb-6">
-          {/* Debug Info */}
-          <div className="mb-4 p-3 bg-gray-100 rounded-md text-sm">
-            <div className="font-medium text-gray-700 mb-2">Debug Info:</div>
-            <div className="grid grid-cols-2 gap-4 text-xs">
-              <div>Selected Class: <span className="font-mono bg-white px-2 py-1 rounded">{selectedClass || 'None'}</span></div>
-              <div>Search Term: <span className="font-mono bg-white px-2 py-1 rounded">{searchTerm || 'None'}</span></div>
-              <div>Status: <span className="font-mono bg-white px-2 py-1 rounded">{pagination.status}</span></div>
-              <div>Total Students: <span className="font-mono bg-white px-2 py-1 rounded">{students.length}</span></div>
-            </div>
-          </div>
+                     {/* Debug Info */}
+           <div className="mb-4 p-3 bg-gray-100 rounded-md text-sm">
+             <div className="font-medium text-gray-700 mb-2">Debug Info:</div>
+             <div className="grid grid-cols-2 gap-4 text-xs">
+               <div>Selected Class: <span className="font-mono bg-white px-2 py-1 rounded">{selectedClass || 'None'}</span></div>
+               <div>Search Term: <span className="font-mono bg-white px-2 py-1 rounded">{searchTerm || 'None'}</span></div>
+               <div>Total Students: <span className="font-mono bg-white px-2 py-1 rounded">{students.length}</span></div>
+               {selectedClass && selectedClass !== 'unassigned' && (
+                 <div className="col-span-2">
+                   <span className="font-medium text-gray-700">Class Details: </span>
+                   <span className="font-mono bg-white px-2 py-1 rounded">
+                     {(() => {
+                       const selectedClassObj = classes.find(c => c.id.toString() === selectedClass);
+                       if (selectedClassObj) {
+                         return `${selectedClassObj.class_name} (${selectedClassObj.grade_level}) [ID: ${selectedClassObj.id}]`;
+                       }
+                       return 'Class not found';
+                     })()}
+                   </span>
+                 </div>
+               )}
+             </div>
+           </div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Search */}
@@ -411,41 +539,48 @@ const StudentManagement: React.FC = () => {
                 value={selectedClass}
                 onChange={(e) => {
                   const newClass = e.target.value;
-                  console.log('Class filter changed from', selectedClass, 'to', newClass);
-                  console.log('New class type:', typeof newClass);
-                  console.log('New class truthy check:', !!newClass);
-                  console.log('New class length:', newClass.length);
+                  console.log('🔍 Class filter changed from', selectedClass, 'to', newClass);
+                  console.log('  - New class type:', typeof newClass);
+                  console.log('  - New class truthy check:', !!newClass);
+                  console.log('  - New class length:', newClass.length);
+                  
+                  // Debug: Show which class object this corresponds to
+                  if (newClass && newClass !== 'unassigned') {
+                    const selectedClassObj = classes.find(c => c.id.toString() === newClass);
+                    console.log('  - Selected class object:', selectedClassObj);
+                    console.log('  - Class ID:', selectedClassObj?.id, 'type:', typeof selectedClassObj?.id);
+                    console.log('  - Class Name:', selectedClassObj?.class_name);
+                    console.log('  - Grade Level:', selectedClassObj?.grade_level);
+                  }
+                  
                   setSelectedClass(newClass);
                   // Remove setTimeout - let useEffect handle the fetch
                 }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
               >
-                                 <option value="">All Classes</option>
-                 {classes.map(cls => (
-                   <option key={cls.id} value={cls.id}>
-                     {cls.class_name} ({cls.grade_level})
-                   </option>
-                 ))}
-                 <option value="unassigned">📋 Unassigned Students</option>
+                <option value="">All Classes</option>
+                                 {classes.map(cls => {
+                   console.log(`🔍 Rendering class option: ID=${cls.id}, Name="${cls.class_name}", Grade="${cls.grade_level}", Value=${cls.id}`);
+                   return (
+                     <option key={cls.id} value={cls.id}>
+                       {cls.class_name} ({cls.grade_level})
+                     </option>
+                   );
+                 })}
+                <option value="unassigned">📋 Unassigned Students</option>
               </select>
             </div>
 
-            {/* Status Filter */}
-            <div>
-              <select
-                value={pagination.status || 'active'}
-                onChange={(e) => {
-                  const newStatus = e.target.value;
-                  setPagination(prev => ({ ...prev, status: newStatus }));
-                  fetchStudents(1);
-                }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="active">Active Students</option>
-                <option value="all">All Students</option>
-                <option value="inactive">Inactive Students</option>
-              </select>
-            </div>
+                         {/* Status Filter - Removed since we now use hard delete */}
+             <div className="hidden">
+               <select
+                 value="active"
+                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                 disabled
+               >
+                 <option value="active">Active Students</option>
+               </select>
+             </div>
 
             {/* Quick Actions */}
             <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 col-span-1 sm:col-span-2 lg:col-span-1 xl:col-span-1">
