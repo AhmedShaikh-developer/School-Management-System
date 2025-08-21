@@ -123,13 +123,21 @@ const getTenantAttendanceSettings = async (req, res) => {
     try {
       // Get attendance configuration
       const configResult = await tenantClient.query(`
-        SELECT * FROM attendance_config ORDER BY id DESC LIMIT 1
+        SELECT * FROM attendance_config ORDER BY id DESC
       `);
       
       // Get classes for selection
       const classesResult = await tenantClient.query(`
         SELECT id, class_name, grade_level FROM classes WHERE status = 'active' ORDER BY class_name
       `);
+
+      // Mark classes as selected based on existing attendance config
+      const classSelection = classesResult.rows.map(c => ({
+        id: c.id,
+        name: c.class_name,
+        grade: c.grade_level,
+        selected: configResult.rows.some(config => config.class_id === c.id)
+      }));
 
       // Get biometric settings from main database
       const mainPool = require('../config/database').mainPool;
@@ -151,11 +159,7 @@ const getTenantAttendanceSettings = async (req, res) => {
           qr: true,
           biometric: biometricResult.rows[0]?.biometric_enabled || false
         },
-        class_selection: classesResult.rows.map(c => ({
-          id: c.id,
-          name: c.class_name,
-          grade: c.grade_level
-        })),
+        class_selection: classSelection,
         sms_alerts: {
           enabled: configResult.rows[0]?.sms_alerts_enabled || false,
           alert_types: configResult.rows[0]?.alert_types || ['late', 'absent'],
@@ -218,33 +222,67 @@ const updateTenantAttendanceSettings = async (req, res) => {
     const tenantClient = await tenantPool.connect();
 
     try {
-      // Update or create attendance configuration
-      const configResult = await tenantClient.query(`
-        INSERT INTO attendance_config (
-          attendance_mode, grace_time_minutes, cut_off_time_minutes, 
-          sms_alerts_enabled, offline_mode_enabled, conflict_resolution
-        ) VALUES ($1, $2, $3, $4, $5, $6)
-        ON CONFLICT (id) DO UPDATE SET
-          attendance_mode = EXCLUDED.attendance_mode,
-          grace_time_minutes = EXCLUDED.grace_time_minutes,
-          cut_off_time_minutes = EXCLUDED.cut_off_time_minutes,
-          sms_alerts_enabled = EXCLUDED.sms_alerts_enabled,
-          offline_mode_enabled = EXCLUDED.offline_mode_enabled,
-          conflict_resolution = EXCLUDED.cut_off_time_minutes,
-          updated_at = CURRENT_TIMESTAMP
-        RETURNING *
-      `, [
-        settings.mode_selection.manual ? 'manual' : (settings.mode_selection.qr ? 'qr' : 'biometric'),
-        settings.attendance_policies.grace_time_minutes,
-        settings.attendance_policies.cut_off_time_minutes,
-        settings.sms_alerts.enabled,
-        false, // offline_mode_enabled
-        'latest' // conflict_resolution
-      ]);
+      // First, clear existing attendance configurations for this tenant
+      await tenantClient.query(`DELETE FROM attendance_config`);
+      
+      // Get selected classes from the settings
+      const selectedClasses = settings.class_selection || [];
+      
+      // Create attendance configuration for each selected class
+      const configResults = [];
+      
+      for (const classInfo of selectedClasses) {
+        if (classInfo.selected) {
+          const configResult = await tenantClient.query(`
+            INSERT INTO attendance_config (
+              class_id, attendance_mode, grace_time_minutes, cut_off_time_minutes, 
+              sms_alerts_enabled, offline_mode_enabled, conflict_resolution,
+              alert_types, alert_time
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            RETURNING *
+          `, [
+            classInfo.id, // class_id - This was missing!
+            settings.mode_selection.manual ? 'manual' : (settings.mode_selection.qr ? 'qr' : 'biometric'),
+            settings.attendance_policies.grace_time_minutes,
+            settings.attendance_policies.cut_off_time_minutes,
+            settings.sms_alerts.enabled,
+            false, // offline_mode_enabled
+            'latest', // conflict_resolution
+            settings.sms_alerts.alert_types || ['late', 'absent'], // alert_types
+            settings.sms_alerts.time || '09:00' // alert_time
+          ]);
+          
+          configResults.push(configResult.rows[0]);
+        }
+      }
+      
+      // If no classes selected, create a default configuration
+      if (configResults.length === 0) {
+        const defaultConfig = await tenantClient.query(`
+          INSERT INTO attendance_config (
+            class_id, attendance_mode, grace_time_minutes, cut_off_time_minutes, 
+            sms_alerts_enabled, offline_mode_enabled, conflict_resolution,
+            alert_types, alert_time
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          RETURNING *
+        `, [
+          null, // class_id is null for default config
+          settings.mode_selection.manual ? 'manual' : (settings.mode_selection.qr ? 'qr' : 'biometric'),
+          settings.attendance_policies.grace_time_minutes,
+          settings.attendance_policies.cut_off_time_minutes,
+          settings.sms_alerts.enabled,
+          false, // offline_mode_enabled
+          'latest', // conflict_resolution
+          settings.sms_alerts.alert_types || ['late', 'absent'], // alert_types
+          settings.sms_alerts.time || '09:00' // alert_time
+        ]);
+        
+        configResults.push(defaultConfig.rows[0]);
+      }
 
       res.json({
         success: true,
-        data: configResult.rows[0],
+        data: configResults,
         message: 'Attendance settings updated successfully'
       });
 

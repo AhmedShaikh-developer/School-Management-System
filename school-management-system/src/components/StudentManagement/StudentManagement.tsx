@@ -37,7 +37,6 @@ const StudentManagement: React.FC = () => {
 
   // Debug selectedClass changes
   useEffect(() => {
-    console.log('selectedClass state changed to:', selectedClass);
     // Save to localStorage whenever it changes
     if (selectedClass) {
       localStorage.setItem('studentManagement_selectedClass', selectedClass);
@@ -49,9 +48,6 @@ const StudentManagement: React.FC = () => {
 
   // Fetch students with auto-retry and offline support
   const fetchStudents = useCallback(async (page = 1, retryCount = 0) => {
-    console.log(`🔄 fetchStudents called - page: ${page}, retryCount: ${retryCount}`);
-    console.log(`🔄 Current state: searchTerm: "${searchTerm}", selectedClass: "${selectedClass}", status: "${pagination.status}"`);
-    
     try {
       setLoading(true);
       
@@ -66,18 +62,7 @@ const StudentManagement: React.FC = () => {
       // Add class_id filter if selected
       if (selectedClass && selectedClass !== '') {
         params.append('class_id', selectedClass);
-        console.log('Adding class_id filter:', selectedClass);
       }
-      
-      console.log('=== FETCH STUDENTS DEBUG ===');
-      console.log('Fetching students with params:', params.toString());
-      console.log('Search term:', searchTerm);
-      console.log('Selected class:', selectedClass);
-      console.log('Selected class type:', typeof selectedClass);
-      console.log('Selected class truthy check:', !!selectedClass);
-      console.log('Status:', pagination.status);
-      console.log('Page:', page);
-      console.log('==========================');
 
       const response = await fetch(`http://localhost:5000/api/students?${params}`, {
         headers: {
@@ -88,72 +73,32 @@ const StudentManagement: React.FC = () => {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Response not OK:', response.status, errorText);
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
-      console.log('Students response:', data);
       
       if (data.success) {
-        console.log('🔍 Students data received:');
-        console.log('  - Total students:', data.data.students.length);
-        console.log('  - Pagination:', data.data.pagination);
-        
-        // Debug each student's class_id
-        data.data.students.forEach((student: any, index: number) => {
-          console.log(`  - Student ${index + 1}: ${student.first_name} ${student.last_name} - class_id: ${student.class_id} (type: ${typeof student.class_id})`);
-        });
-        
-        console.log('Setting students:', data.data.students);
-        console.log('Setting pagination:', data.data.pagination);
-        
-        // Verify the filter was applied correctly
-        if (selectedClass === 'unassigned') {
-          console.log('=== VERIFYING UNASSIGNED FILTER ===');
-          const unassignedStudents = data.data.students.filter((s: any) => s.class_id === null);
-          const assignedStudents = data.data.students.filter((s: any) => s.class_id !== null);
-          console.log('Students returned by API:', data.data.students.length);
-          console.log('Unassigned students in response:', unassignedStudents.length);
-          console.log('Assigned students in response:', assignedStudents.length);
-          
-          if (assignedStudents.length > 0) {
-            console.warn('WARNING: Assigned students found in unassigned filter response!');
-            assignedStudents.forEach((s: any) => {
-              console.warn(`  - ${s.first_name} ${s.last_name} (Class ID: ${s.class_id})`);
-            });
-          }
-        }
-        
-        console.log('🔍 Setting students state with:', data.data.students);
+        // Update state
         setStudents(data.data.students);
         setPagination(data.data.pagination);
       } else {
-        throw new Error(data.error || 'Failed to fetch students');
+        throw new Error(data.message || 'Failed to fetch students');
       }
     } catch (error) {
-      console.error('Error fetching students:', error);
-      
-      // Auto-retry logic for network issues
-      if (retryCount < 3 && (error instanceof TypeError || (error instanceof Error && error.message.includes('network')))) {
-        setTimeout(() => fetchStudents(page, retryCount + 1), 2000 * (retryCount + 1));
-        return;
-      }
-      
-      // Show offline message and use cached data if available
-      if (retryCount >= 3) {
-        toast.warning('Network connection issue. Showing cached data if available.');
-        // In a real app, you'd load from localStorage/IndexedDB
+      if (retryCount < 3) {
+        setTimeout(() => fetchStudents(page, retryCount + 1), 1000 * (retryCount + 1));
+      } else {
+        toast.error('Failed to fetch students after multiple attempts');
       }
     } finally {
       setLoading(false);
     }
-  }, [tenantToken, searchTerm, selectedClass, pagination.status]);
+  }, [searchTerm, selectedClass, pagination.status, tenantToken]);
 
   // Fetch classes for filtering
   const fetchClasses = useCallback(async () => {
     try {
-      console.log('Fetching classes...');
       const response = await fetch('http://localhost:5000/api/classes', {
         headers: {
           'Authorization': `Bearer ${tenantToken}`,
@@ -161,99 +106,51 @@ const StudentManagement: React.FC = () => {
         }
       });
 
-      console.log('Classes response status:', response.status);
-      
       if (response.ok) {
         const data = await response.json();
-        console.log('Classes response data:', data);
-                               if (data.success) {
-                  console.log('🔍 Classes fetched successfully:');
-                  console.log('  - Raw classes data:', data.data);
-                  console.log('  - Classes array length:', data.data.length);
-                  data.data.forEach((cls: any, index: number) => {
-                    console.log(`  - Class ${index + 1}: ID=${cls.id} (type: ${typeof cls.id}), Name="${cls.class_name}", Grade="${cls.grade_level}"`);
-                    console.log(`    Raw class object:`, cls);
-                    console.log(`    JSON.stringify:`, JSON.stringify(cls, null, 2));
-                    
-                    // Check if there are any type conversion issues
-                    if (typeof cls.id !== 'number') {
-                      console.warn(`⚠️ Class ${index + 1} has non-numeric ID:`, cls.id, 'type:', typeof cls.id);
-                    }
-                    
-                    // Check for potential ID mismatches
-                    if (cls.class_name && cls.class_name.includes('Class ')) {
-                      const expectedId = cls.class_name.replace('Class ', '');
-                      if (cls.id.toString() !== expectedId) {
-                        console.warn(`⚠️ POTENTIAL ID MISMATCH: Class name "${cls.class_name}" suggests ID should be ${expectedId}, but actual ID is ${cls.id}`);
-                      }
-                    }
-                  });
-                  setClasses(data.data);
-                } else {
-                  console.error('Classes API returned success: false:', data);
-                }
-      } else {
-        console.error('Classes API error status:', response.status);
-        const errorText = await response.text();
-        console.error('Classes API error response:', errorText);
+        if (data.success) {
+          setClasses(data.data);
+        }
       }
     } catch (error) {
-      console.error('Error fetching classes:', error);
+      toast.error('Failed to fetch classes');
     }
   }, [tenantToken]);
 
   // Initial data fetch
   useEffect(() => {
-    console.log('🚀 Initial data fetch useEffect triggered');
-    fetchStudents();
     fetchClasses();
-  }, []); // Only run once on mount
+    fetchStudents(1);
+  }, [fetchClasses, fetchStudents]);
 
-  // Monitor students state changes
+  // Update students when students state changes
   useEffect(() => {
-    console.log('🔍 Students state changed:');
-    console.log('  - Total students:', students.length);
-    students.forEach((student, index) => {
-      console.log(`  - Student ${index + 1}: ${student.first_name} ${student.last_name} - class_id: ${student.class_id} (type: ${typeof student.class_id})`);
-    });
+    // This effect runs whenever the students array changes
+    // It's useful for debugging and ensuring state consistency
   }, [students]);
 
-  // Debounced search - only trigger when search term changes
+  // Search effect
   useEffect(() => {
-    if (searchTerm !== '') {
-      console.log('🔍 Search effect triggered:', { searchTerm });
-      const timer = setTimeout(() => {
-        console.log('🔍 Executing search with:', { searchTerm });
-        fetchStudents(1);
-      }, 500);
+    const timeoutId = setTimeout(() => {
+      fetchStudents(1);
+    }, 500);
 
-      return () => clearTimeout(timer);
-    }
-  }, [searchTerm]); // Only depend on searchTerm
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm, fetchStudents]);
 
-  // Class filter effect - trigger immediately when class filter changes
+  // Class filter effect
   useEffect(() => {
-    console.log('🎯 Class filter effect triggered:', selectedClass);
-    console.log('  - selectedClass type:', typeof selectedClass);
-    console.log('  - selectedClass value:', selectedClass);
-    console.log('  - selectedClass truthy check:', !!selectedClass);
-    
-    // Debug: Show which class this corresponds to
-    if (selectedClass && selectedClass !== 'unassigned') {
-      const selectedClassObj = classes.find(c => c.id.toString() === selectedClass);
-      console.log('  - Corresponding class object:', selectedClassObj);
+    if (selectedClass) {
+      const selectedClassObj = classes.find(cls => cls.id.toString() === selectedClass);
       if (selectedClassObj) {
-        console.log('  - Class ID:', selectedClassObj.id, 'type:', typeof selectedClassObj.id);
-        console.log('  - Class Name:', selectedClassObj.class_name);
-        console.log('  - Grade Level:', selectedClassObj.grade_level);
-      } else {
-        console.warn('  - ⚠️ No class object found for selectedClass:', selectedClass);
-        console.log('  - Available classes:', classes.map(c => ({ id: c.id, name: c.class_name })));
+        // Class is valid, proceed with fetch
+        fetchStudents(1);
       }
+    } else {
+      // No class selected, fetch all students
+      fetchStudents(1);
     }
-    
-    fetchStudents(1);
-  }, [selectedClass, classes]); // Added classes dependency to access it in the effect
+  }, [selectedClass, classes, fetchStudents]);
 
   // Aggressive logo and branding removal
   useEffect(() => {
@@ -339,32 +236,17 @@ const StudentManagement: React.FC = () => {
   };
 
   const handleStudentCreated = (newStudent: Student) => {
-    console.log('🎯 handleStudentCreated called with:', newStudent);
-    console.log('  - Full newStudent object:', newStudent);
-    console.log('  - newStudent.class_id:', newStudent.class_id, 'type:', typeof newStudent.class_id);
-    console.log('  - JSON.stringify(newStudent):', JSON.stringify(newStudent, null, 2));
-    
     const studentWithStatus = { ...newStudent, status: 'active' };
-    console.log('🎯 Adding student to local state:', studentWithStatus);
-    console.log('  - studentWithStatus.class_id:', studentWithStatus.class_id, 'type:', typeof studentWithStatus.class_id);
-    
     setStudents(prev => [studentWithStatus, ...prev]);
     setShowForm(false);
     toast.success('Student created successfully!');
-    console.log('🎯 Student creation completed successfully');
   };
 
   const handleStudentUpdated = (updatedStudent: Student) => {
-    console.log('🎯 handleStudentUpdated called with:', updatedStudent);
-    console.log('  - Full updatedStudent object:', updatedStudent);
-    console.log('  - updatedStudent.class_id:', updatedStudent.class_id, 'type:', typeof updatedStudent.class_id);
-    console.log('  - JSON.stringify(updatedStudent):', JSON.stringify(updatedStudent, null, 2));
-    
     setStudents(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s));
     setShowForm(false);
     setEditingStudent(null);
     toast.success('Student updated successfully!');
-    console.log('🎯 Student update completed successfully');
   };
 
   const handleStudentDeleted = (studentId: number) => {
@@ -387,7 +269,6 @@ const StudentManagement: React.FC = () => {
   };
 
      const resetFilters = () => {
-     console.log('Resetting filters');
      setSearchTerm('');
      setSelectedClass('');
      // Status is always 'active' since we use hard delete
@@ -396,16 +277,12 @@ const StudentManagement: React.FC = () => {
    };
 
   const manualRefresh = () => {
-    console.log('Manual refresh clicked');
-    console.log('Current filter state:', { selectedClass, searchTerm, status: pagination.status });
     fetchStudents(1);
   };
 
   const handleBulkImportSuccess = (importData: any) => {
-    console.log('Bulk import success handler called with:', importData);
     toast.success(`Bulk import completed! ${importData.successful_imports} students imported successfully.`);
     setShowBulkImport(false);
-    console.log('Calling fetchStudents(1) to refresh the list...');
     fetchStudents(1); // Refresh the list
   };
 
@@ -526,7 +403,6 @@ const StudentManagement: React.FC = () => {
                 placeholder="Search students..."
                 value={searchTerm}
                 onChange={(e) => {
-                  console.log('Search input changed:', e.target.value);
                   setSearchTerm(e.target.value);
                 }}
                 className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-md focus:ring-blue-500 focus:ring-blue-500"
@@ -539,28 +415,12 @@ const StudentManagement: React.FC = () => {
                 value={selectedClass}
                 onChange={(e) => {
                   const newClass = e.target.value;
-                  console.log('🔍 Class filter changed from', selectedClass, 'to', newClass);
-                  console.log('  - New class type:', typeof newClass);
-                  console.log('  - New class truthy check:', !!newClass);
-                  console.log('  - New class length:', newClass.length);
-                  
-                  // Debug: Show which class object this corresponds to
-                  if (newClass && newClass !== 'unassigned') {
-                    const selectedClassObj = classes.find(c => c.id.toString() === newClass);
-                    console.log('  - Selected class object:', selectedClassObj);
-                    console.log('  - Class ID:', selectedClassObj?.id, 'type:', typeof selectedClassObj?.id);
-                    console.log('  - Class Name:', selectedClassObj?.class_name);
-                    console.log('  - Grade Level:', selectedClassObj?.grade_level);
-                  }
-                  
                   setSelectedClass(newClass);
-                  // Remove setTimeout - let useEffect handle the fetch
                 }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="">All Classes</option>
                                  {classes.map(cls => {
-                   console.log(`🔍 Rendering class option: ID=${cls.id}, Name="${cls.class_name}", Grade="${cls.grade_level}", Value=${cls.id}`);
                    return (
                      <option key={cls.id} value={cls.id}>
                        {cls.class_name} ({cls.grade_level})

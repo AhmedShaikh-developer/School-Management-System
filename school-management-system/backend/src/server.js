@@ -237,9 +237,15 @@ app.use((error, req, res, next) => {
 // Initialize database and start server
 const startServer = async () => {
   try {
-    console.log('Initializing database...');
     await initializeMainDatabase();
-    console.log('Database initialized successfully');
+    
+    // Check if migrations are needed before running them
+    const { migrateTenantDatabases, checkMigrationsNeeded } = require('./config/database');
+    const migrationsNeeded = await checkMigrationsNeeded();
+    
+    if (migrationsNeeded) {
+      await migrateTenantDatabases();
+    }
     
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);

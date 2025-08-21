@@ -468,6 +468,29 @@ const AttendancePage: React.FC = () => {
     fetchSettings();
   }, [tenantId, tenantToken]);
 
+  // Fetch attendance settings from backend
+  const fetchAttendanceSettings = async () => {
+    if (!tenantId) return;
+    
+    try {
+      const response = await fetch(`http://localhost:5000/api/attendance/settings/${tenantId}`, {
+        headers: {
+          'Authorization': `Bearer ${tenantToken}`
+        }
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setSettings(data.data);
+      } else {
+        setError(data.message || 'Failed to fetch attendance settings');
+      }
+    } catch (error) {
+      setError('Failed to fetch attendance settings');
+    }
+  };
+
   const handleSave = async () => {
     if (!tenantId || !settings) return;
     
@@ -489,11 +512,16 @@ const AttendancePage: React.FC = () => {
       
       if (data.success) {
         setMessage('Attendance settings saved successfully!');
+        setError('');
+        // Refresh settings to show updated data
+        fetchAttendanceSettings();
       } else {
-        setError(data.message || 'Failed to save settings');
+        setError(data.message || 'Failed to save attendance settings');
+        setMessage('');
       }
-    } catch (err) {
-      setError('Network error. Please try again.');
+    } catch (error) {
+      setError('Error saving attendance settings');
+      setMessage('');
     } finally {
       setSaving(false);
     }
@@ -662,6 +690,14 @@ const AttendancePage: React.FC = () => {
                   <input
                     type="checkbox"
                     id={`class-${cls.id}`}
+                    checked={cls.selected || false}
+                    onChange={(e) => {
+                      // Update the class selection state
+                      const updatedClasses = settings.class_selection.map((c: any) => 
+                        c.id === cls.id ? { ...c, selected: e.target.checked } : c
+                      );
+                      updateSetting('class_selection', updatedClasses);
+                    }}
                     className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                   />
                   <label htmlFor={`class-${cls.id}`} className="ml-2 text-sm font-medium text-gray-700">

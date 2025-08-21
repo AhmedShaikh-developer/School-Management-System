@@ -39,32 +39,18 @@ const StudentForm: React.FC<StudentFormProps> = ({
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [lastSavedData, setLastSavedData] = useState<string>('');
 
-  // Initialize form with student data if editing
+  // Initialize form data
   useEffect(() => {
-    console.log('🔄 Form initialization - student:', student, 'classes:', classes);
-    
-    // Reset submission state when student changes
-    setSubmitted(false);
-    
     if (student) {
       const initialData = {
         ...student,
-        date_of_birth: student.date_of_birth ? new Date(student.date_of_birth).toISOString().split('T')[0] : null,
-        enrollment_date: student.enrollment_date ? new Date(student.enrollment_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+        class_id: student.class_id || undefined
       };
-      console.log('📝 Setting initial form data for editing:', initialData);
-      console.log('🎯 Student class_id:', student.class_id, 'type:', typeof student.class_id);
-      console.log('🎯 Initial formData.class_id will be:', initialData.class_id);
       setFormData(initialData);
     } else {
-      // Smart defaults for new students
+      // For new students, auto-select the first class if only one exists
       if (classes.length === 1) {
-        // Auto-select if only one class exists
-        console.log('🎯 Auto-selecting single class:', classes[0]);
-        setFormData(prev => ({
-          ...prev,
-          class_id: classes[0].id
-        }));
+        setFormData(prev => ({ ...prev, class_id: classes[0].id }));
       }
     }
   }, [student, classes]);
@@ -109,13 +95,6 @@ const StudentForm: React.FC<StudentFormProps> = ({
     }
   }, [student, tenantToken, lastSavedData]);
 
-  // Debug form data changes
-  useEffect(() => {
-    console.log('🔄 Form data changed - class_id:', formData.class_id, 'type:', typeof formData.class_id);
-    console.log('  - Full formData:', formData);
-    console.log('  - formData.class_id:', formData.class_id, 'type:', typeof formData.class_id);
-  }, [formData.class_id]);
-
   // Debounced auto-save
   useEffect(() => {
     // Don't auto-save when form is loading or for new students
@@ -128,10 +107,8 @@ const StudentForm: React.FC<StudentFormProps> = ({
     return () => clearTimeout(timer);
   }, [formData, autoSave, loading, student]);
 
-  const validateForm = (): boolean => {
+  const validateForm = () => {
     const newErrors: Record<string, string> = {};
-
-    console.log('🔍 validateForm - formData.class_id:', formData.class_id, 'type:', typeof formData.class_id);
 
     if (!formData.first_name.trim()) {
       newErrors.first_name = 'First name is required';
@@ -150,12 +127,8 @@ const StudentForm: React.FC<StudentFormProps> = ({
     // For new students, we require a selection
     if (formData.class_id === undefined) {
       newErrors.class_id = 'Please select a class or choose "Assign Later"';
-      console.log('❌ Class validation failed - class_id is undefined (new student)');
-    } else {
-      console.log('✅ Class validation passed - class_id is valid:', formData.class_id);
     }
 
-    console.log('🔍 Validation errors:', newErrors);
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -163,53 +136,21 @@ const StudentForm: React.FC<StudentFormProps> = ({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     
-    console.log('🔍 Input change event:', {
-      name,
-      value,
-      valueType: typeof value,
-      target: e.target,
-      targetValue: e.target.value,
-      targetValueType: typeof e.target.value
-    });
-    
-    // Handle special case for "Assign Later" option
     if (name === 'class_id') {
-      console.log('🔍 Class ID input change - raw value:', value, 'type:', typeof value);
-      console.log('  - Event target value:', e.target.value, 'type:', typeof e.target.value);
-      
-      // Only log select-specific properties if this is a select element
-      if (e.target instanceof HTMLSelectElement) {
-        console.log('  - Event target selectedIndex:', e.target.selectedIndex);
-        console.log('  - Event target options:', Array.from(e.target.options).map((opt: HTMLOptionElement, idx: number) => ({ 
-          index: idx, 
-          value: opt.value, 
-          text: opt.text 
-        })));
-      }
+      let parsedValue: number | undefined;
       
       if (value === 'unassigned') {
-        console.log('🎯 Setting class_id to "unassigned"');
-        setFormData(prev => ({
-          ...prev,
-          [name]: 'unassigned'
-        }));
+        parsedValue = undefined;
       } else if (value === '') {
-        console.log('🎯 Setting class_id to undefined');
-        setFormData(prev => ({
-          ...prev,
-          [name]: undefined
-        }));
+        parsedValue = undefined;
       } else {
-        const parsedValue = parseInt(value);
-        console.log('🎯 Setting class_id to parsed value:', parsedValue, 'from raw:', value);
-        console.log('  - Parsed value type:', typeof parsedValue);
-        console.log('  - Is NaN:', isNaN(parsedValue));
-        console.log('  - Setting formData.class_id to:', parsedValue, 'type:', typeof parsedValue);
-        setFormData(prev => ({
-          ...prev,
-          [name]: parsedValue
-        }));
+        parsedValue = parseInt(value, 10);
+        if (isNaN(parsedValue)) {
+          parsedValue = undefined;
+        }
       }
+      
+      setFormData(prev => ({ ...prev, [name]: parsedValue }));
     } else if (name === 'date_of_birth' || name === 'enrollment_date') {
       // Handle date fields - convert empty strings to null
       setFormData(prev => ({
@@ -217,10 +158,7 @@ const StudentForm: React.FC<StudentFormProps> = ({
         [name]: value && value.trim() !== '' ? value : null
       }));
     } else {
-      setFormData(prev => ({
-        ...prev,
-        [name]: value
-      }));
+      setFormData(prev => ({ ...prev, [name]: value }));
     }
     
     // Clear error when user starts typing
@@ -238,38 +176,29 @@ const StudentForm: React.FC<StudentFormProps> = ({
     
     // Prevent multiple submissions
     if (loading || submitted) {
-      console.log('🚫 Form submission blocked - already loading or submitted');
       return;
     }
     
     // Additional check for new students to prevent duplicate creation
     if (!student && submitted) {
-      console.log('🚫 Form submission blocked - new student already submitted');
       return;
     }
     
     // Additional check for new students to prevent duplicate creation by email
     if (!student) {
-      console.log('🔍 Checking if student with this email already exists...');
       // This is a simple check - in a real app you might want to check the database
       // For now, we'll just log it and continue
       
       // Check if we already have a student with this email in the current session
       if (window.sessionStorage.getItem(`student_created_${formData.email}`)) {
-        console.log('🚫 Student with this email already created in this session');
         toast.error('Student with this email already exists');
         return;
       }
     }
     
-          console.log('🚀 handleSubmit called - formData:', formData);
-      console.log('  - formData.class_id:', formData.class_id, 'type:', typeof formData.class_id);
-      console.log('  - JSON.stringify(formData):', JSON.stringify(formData, null, 2));
-      const validationResult = validateForm();
-      console.log('🚀 validateForm result:', validationResult);
+    const validationResult = validateForm();
     
     if (!validationResult) {
-      console.log('❌ Form validation failed - errors:', errors);
       toast.error('Please fix the errors in the form');
       return;
     }
@@ -279,40 +208,21 @@ const StudentForm: React.FC<StudentFormProps> = ({
     
     try {
       // Prepare data for submission
-      console.log('🔍 Processing class_id for submission:');
-      console.log('  - formData.class_id:', formData.class_id, 'type:', typeof formData.class_id);
-      
       let processedClassId: number | null = null;
-      console.log('  - Processing class_id:', formData.class_id, 'type:', typeof formData.class_id);
       
       if (formData.class_id && formData.class_id !== 'unassigned') {
         processedClassId = typeof formData.class_id === 'number' ? formData.class_id : Number(formData.class_id);
-        console.log('  - Processed class_id:', processedClassId, 'type:', typeof processedClassId);
-        console.log('  - Is processedClassId NaN:', isNaN(processedClassId));
       } else {
-        console.log('  - Setting class_id to null (unassigned)');
+        // If class_id is 'unassigned' or undefined, keep it as null (unassigned)
       }
-      // If class_id is 'unassigned' or undefined, keep it as null (unassigned)
       
       const submitData = {
         ...formData,
         class_id: processedClassId
       };
 
-      console.log('🔍 Final submission data:');
-      console.log('  - Original formData:', formData);
-      console.log('  - Processed submitData:', submitData);
-      console.log('  - Final class_id value:', submitData.class_id, 'type:', typeof submitData.class_id);
-      console.log('  - submitData.class_id === processedClassId:', submitData.class_id === processedClassId);
-      console.log('  - JSON.stringify(submitData):', JSON.stringify(submitData, null, 2));
-
       const url = student ? `http://localhost:5000/api/students/${student.id}` : 'http://localhost:5000/api/students';
       const method = student ? 'PUT' : 'POST';
-      
-      console.log('🔍 Making API request:');
-      console.log('  - URL:', url);
-      console.log('  - Method:', method);
-      console.log('  - Request body:', JSON.stringify(submitData, null, 2));
       
       const response = await fetch(url, {
         method,
@@ -323,23 +233,12 @@ const StudentForm: React.FC<StudentFormProps> = ({
         body: JSON.stringify(submitData)
       });
 
-      console.log('🔍 API response received:');
-      console.log('  - Status:', response.status);
-      console.log('  - OK:', response.ok);
-
       if (response.ok) {
         const result = await response.json();
-        console.log('🔍 Success response data:');
-        console.log('  - Full response:', result);
-        console.log('  - Student data:', result.data);
-        console.log('  - Final class_id in response:', result.data?.class_id, 'type:', typeof result.data?.class_id);
-        console.log('  - JSON.stringify(result):', JSON.stringify(result, null, 2));
-        console.log('🎯 Calling onSuccess with student data:', result.data);
         
         // For new students, mark this email as created in this session
         if (!student) {
           window.sessionStorage.setItem(`student_created_${formData.email}`, 'true');
-          console.log('🎯 Marked email as created in session storage');
           
           // Also set a flag to prevent further submissions
           setSubmitted(true);
@@ -554,10 +453,6 @@ const StudentForm: React.FC<StudentFormProps> = ({
                  >
                    <option value="">Select class</option>
                                        {classes.map(cls => {
-                      console.log(`🔍 Rendering class option: ID=${cls.id}, Name="${cls.class_name}", Value=${cls.id}`);
-                      console.log(`  - Option value attribute:`, cls.id, 'type:', typeof cls.id);
-                      console.log(`  - Option key:`, cls.id, 'type:', typeof cls.id);
-                      console.log(`  - Option HTML: <option key="${cls.id}" value="${cls.id}">${cls.class_name} (${cls.grade_level})</option>`);
                       return (
                         <option key={cls.id} value={cls.id}>
                           {cls.class_name} ({cls.grade_level})

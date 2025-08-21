@@ -91,7 +91,6 @@ const initializeMainDatabase = async () => {
         END $$;
       `);
     } catch (migrationError) {
-      console.log('Migration for database_name column:', migrationError.message);
       // Continue even if migration fails
     }
 
@@ -187,8 +186,6 @@ const initializeMainDatabase = async () => {
       `);
       
       if (columnCheck.rows.length === 0) {
-        console.log('Migrating tenant_branding table to add logo columns...');
-        
         // Add new logo columns
         await client.query(`
           ALTER TABLE tenant_branding 
@@ -209,11 +206,8 @@ const initializeMainDatabase = async () => {
             ALTER TABLE tenant_branding DROP COLUMN logo_url
           `);
         }
-        
-        console.log('Migration completed successfully');
       }
     } catch (migrationError) {
-      console.error('Migration error:', migrationError);
       // Continue even if migration fails
     }
 
@@ -234,7 +228,6 @@ const initializeMainDatabase = async () => {
     `);
 
     client.release();
-    console.log('Main database initialized successfully');
   } catch (error) {
     console.error('Error initializing main database:', error);
     throw error;
@@ -325,6 +318,7 @@ const createTenantDatabase = async (tenantId, schoolName, databaseName = null) =
     await tenantClient.query(`
       CREATE TABLE students (
         id SERIAL PRIMARY KEY,
+        tenant_id VARCHAR(50) NOT NULL,
         student_id VARCHAR(50) UNIQUE NOT NULL,
         first_name VARCHAR(100) NOT NULL,
         last_name VARCHAR(100) NOT NULL,
@@ -432,6 +426,7 @@ const createTenantDatabase = async (tenantId, schoolName, databaseName = null) =
     await tenantClient.query(`
       CREATE TABLE classes (
         id SERIAL PRIMARY KEY,
+        tenant_id VARCHAR(50) NOT NULL,
         class_name VARCHAR(100) NOT NULL,
         grade_level VARCHAR(50) NOT NULL,
         section VARCHAR(50),
@@ -468,6 +463,8 @@ const createTenantDatabase = async (tenantId, schoolName, databaseName = null) =
         sms_alerts_enabled BOOLEAN DEFAULT TRUE,
         offline_mode_enabled BOOLEAN DEFAULT FALSE,
         conflict_resolution VARCHAR(20) DEFAULT 'latest', -- latest, earliest, manual
+        alert_types TEXT[] DEFAULT ARRAY['late', 'absent'], -- Array of alert types
+        alert_time TIME DEFAULT '09:00', -- Time to send alerts
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -578,10 +575,13 @@ const createTenantDatabase = async (tenantId, schoolName, databaseName = null) =
 
     // Add indexes for better performance
     await tenantClient.query(`
+      CREATE INDEX idx_students_tenant_id ON students(tenant_id);
       CREATE INDEX idx_students_class_id ON students(class_id);
+      CREATE INDEX idx_classes_tenant_id ON classes(tenant_id);
       CREATE INDEX idx_attendance_student_date ON attendance(student_id, date);
       CREATE INDEX idx_attendance_class_date ON attendance(class_id, date);
       CREATE INDEX idx_attendance_mode ON attendance(attendance_mode);
+      CREATE INDEX idx_attendance_config_class_id ON attendance_config(class_id);
       CREATE INDEX idx_qr_codes_class_valid ON qr_codes(class_id, valid_from, valid_until);
       CREATE INDEX idx_sms_alerts_status ON sms_alerts(status);
       CREATE INDEX idx_offline_queue_sync_status ON offline_attendance_queue(sync_status);
@@ -590,7 +590,6 @@ const createTenantDatabase = async (tenantId, schoolName, databaseName = null) =
     tenantClient.release();
     tenantPool.end();
     
-    console.log(`Tenant database ${tenantDbName} created successfully with attendance system`);
     return tenantDbName; // Return the database name for storage in tenants table
   } catch (error) {
     console.error(`Error creating tenant database ${tenantDbName}:`, error);
@@ -614,7 +613,6 @@ const dropTenantDatabase = async (tenantId, databaseName = null) => {
     const client = await mainPool.connect();
     await client.query(`DROP DATABASE IF EXISTS "${tenantDbName}"`);
     client.release();
-    console.log(`Tenant database ${tenantDbName} dropped successfully`);
     return true;
   } catch (error) {
     console.error(`Error dropping tenant database ${tenantDbName}:`, error);
@@ -731,16 +729,6 @@ const updateTenantBranding = async (tenantId, brandingData) => {
       custom_css
     } = brandingData;
     
-    // Debug: Log the values being sent to database
-    console.log('Database update values:', {
-      tenantId,
-      primary_color,
-      secondary_color,
-      accent_color,
-      font_family,
-      custom_css
-    });
-    
     // Use CASE statements to handle empty strings properly
     await client.query(`
       INSERT INTO tenant_branding (tenant_id, logo_data, logo_filename, logo_mimetype, primary_color, secondary_color, accent_color, font_family, custom_css)
@@ -801,6 +789,185 @@ const getTenantByCustomDomain = async (domain) => {
   }
 };
 
+// Check if any migrations are needed
+const checkMigrationsNeeded = async () => {
+  try {
+    const client = await mainPool.connect();
+    
+    // Check if migrations table exists
+    const migrationCheck = await client.query(`
+      SELECT 1 FROM information_schema.tables 
+      WHERE table_name = 'database_migrations'
+    `);
+    
+    if (migrationCheck.rows.length === 0) {
+      // Migrations table doesn't exist, migration needed
+      client.release();
+      return true;
+    }
+    
+    // Check if attendance config migration has been applied
+    const attendanceMigration = await client.query(`
+      SELECT 1 FROM database_migrations 
+      WHERE migration_name = 'attendance_config_columns_v1'
+    `);
+    
+    // Check if tenant_id columns migration has been applied
+    const tenantIdMigration = await client.query(`
+      SELECT 1 FROM database_migrations 
+      WHERE migration_name = 'add_tenant_id_columns_v1'
+    `);
+    
+    client.release();
+    
+    // Return true if any migration is needed, false if all are applied
+    return attendanceMigration.rows.length === 0 || tenantIdMigration.rows.length === 0;
+    
+  } catch (error) {
+    console.error('Error checking migrations:', error);
+    // If we can't check, assume migration is needed for safety
+    return true;
+  }
+};
+
+// Migrate existing tenant databases to add new attendance config columns
+const migrateTenantDatabases = async () => {
+  try {
+    const client = await mainPool.connect();
+    
+    // Check if migration has already been completed
+    const migrationCheck = await client.query(`
+      SELECT 1 FROM information_schema.tables 
+      WHERE table_name = 'database_migrations'
+    `);
+    
+    // Create migrations tracking table if it doesn't exist
+    if (migrationCheck.rows.length === 0) {
+      await client.query(`
+        CREATE TABLE database_migrations (
+          id SERIAL PRIMARY KEY,
+          migration_name VARCHAR(255) UNIQUE NOT NULL,
+          applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          status VARCHAR(20) DEFAULT 'completed'
+        )
+      `);
+    }
+    
+    // Check if attendance config migration has already been applied
+    const attendanceMigration = await client.query(`
+      SELECT 1 FROM database_migrations 
+      WHERE migration_name = 'attendance_config_columns_v1'
+    `);
+    
+    // Check if tenant_id columns migration has already been applied
+    const tenantIdMigration = await client.query(`
+      SELECT 1 FROM database_migrations 
+      WHERE migration_name = 'add_tenant_id_columns_v1'
+    `);
+    
+    // Get all tenant databases
+    const tenantsResult = await client.query(`
+      SELECT tenant_id, database_name FROM tenants WHERE status = 'active'
+    `);
+    
+    for (const tenant of tenantsResult.rows) {
+      try {
+        const tenantPool = createTenantPool(tenant.tenant_id, tenant.database_name);
+        const tenantClient = await tenantPool.connect();
+        
+        try {
+          // Migration 1: Add attendance config columns if needed
+          if (attendanceMigration.rows.length === 0) {
+            const columnCheck = await tenantClient.query(`
+              SELECT column_name 
+              FROM information_schema.columns 
+              WHERE table_name = 'attendance_config' AND column_name = 'alert_types'
+            `);
+            
+            if (columnCheck.rows.length === 0) {
+              await tenantClient.query(`
+                ALTER TABLE attendance_config 
+                ADD COLUMN IF NOT EXISTS alert_types TEXT[] DEFAULT ARRAY['late', 'absent'],
+                ADD COLUMN IF NOT EXISTS alert_time TIME DEFAULT '09:00'
+              `);
+            }
+          }
+          
+          // Migration 2: Add tenant_id columns if needed
+          if (tenantIdMigration.rows.length === 0) {
+            // Check if classes table has tenant_id column
+            const classesColumnCheck = await tenantClient.query(`
+              SELECT column_name 
+              FROM information_schema.columns 
+              WHERE table_name = 'classes' AND column_name = 'tenant_id'
+            `);
+            
+            if (classesColumnCheck.rows.length === 0) {
+              await tenantClient.query(`
+                ALTER TABLE classes 
+                ADD COLUMN tenant_id VARCHAR(50) NOT NULL DEFAULT $1
+              `, [tenant.tenant_id]);
+            }
+            
+            // Check if students table has tenant_id column
+            const studentsColumnCheck = await tenantClient.query(`
+              SELECT column_name 
+              FROM information_schema.columns 
+              WHERE table_name = 'students' AND column_name = 'tenant_id'
+            `);
+            
+            if (studentsColumnCheck.rows.length === 0) {
+              await tenantClient.query(`
+                ALTER TABLE students 
+                ADD COLUMN tenant_id VARCHAR(50) NOT NULL DEFAULT $1
+              `, [tenant.tenant_id]);
+            }
+            
+            // Add indexes for tenant_id columns
+            try {
+              await tenantClient.query(`
+                CREATE INDEX IF NOT EXISTS idx_students_tenant_id ON students(tenant_id);
+                CREATE INDEX IF NOT EXISTS idx_classes_tenant_id ON classes(tenant_id);
+              `);
+            } catch (indexError) {
+              // Indexes might already exist, continue
+            }
+          }
+          
+        } finally {
+          tenantClient.release();
+          tenantPool.end();
+        }
+      } catch (error) {
+        console.error(`Error migrating ${tenant.database_name}:`, error);
+        // Continue with other tenants
+      }
+    }
+    
+    // Mark migrations as completed
+    if (attendanceMigration.rows.length === 0) {
+      await client.query(`
+        INSERT INTO database_migrations (migration_name, status)
+        VALUES ('attendance_config_columns_v1', 'completed')
+        ON CONFLICT (migration_name) DO NOTHING
+      `);
+    }
+    
+    if (tenantIdMigration.rows.length === 0) {
+      await client.query(`
+        INSERT INTO database_migrations (migration_name, status)
+        VALUES ('add_tenant_id_columns_v1', 'completed')
+        ON CONFLICT (migration_name) DO NOTHING
+      `);
+    }
+    
+    client.release();
+    
+  } catch (error) {
+    console.error('Error during tenant database migration:', error);
+  }
+};
+
 module.exports = {
   mainPool,
   createTenantPool,
@@ -814,5 +981,7 @@ module.exports = {
   getTenantBranding,
   updateTenantBranding,
   getTenantByCustomDomain,
-  generateVerificationToken
+  generateVerificationToken,
+  migrateTenantDatabases,
+  checkMigrationsNeeded
 }; 
