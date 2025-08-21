@@ -12,6 +12,7 @@ import ChangePassword from './components/ChangePassword';
 import OnboardingSuccess from './components/OnboardingSuccess';
 import StudentManagement from './components/StudentManagement/StudentManagement';
 import ClassManagement from './components/ClassManagement/ClassManagement';
+import AcademicYearManagement from './components/AcademicYearManagement/AcademicYearManagement';
 
 import axios from 'axios';
 import './App.css';
@@ -851,17 +852,48 @@ const TenantDashboard: React.FC = () => {
   const [unassignedStudentsCount, setUnassignedStudentsCount] = useState<number>(0);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   
-  // Fetch tenant setup status on component mount
+  // Fetch tenant setup status and academic year prerequisites on component mount
   useEffect(() => {
     const fetchSetupStatus = async () => {
       if (!tenantId) return;
       
       try {
-        const response = await fetch(`http://localhost:5000/api/tenants/${tenantId}/setup-status`);
-        const data = await response.json();
+        // Fetch setup status
+        const setupResponse = await fetch(`http://localhost:5000/api/tenants/${tenantId}/setup-status`);
+        const setupData = await setupResponse.json();
         
-        if (data.success) {
-          setSetupStatus(data.data);
+        if (setupData.success) {
+          setSetupStatus(setupData.data);
+        }
+        
+        // Fetch academic year prerequisites
+        const ayResponse = await fetch(`http://localhost:5000/api/academic-years/prerequisites/attendance`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('tenantToken')}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (ayResponse.ok) {
+          const ayData = await ayResponse.json();
+          if (ayData.success) {
+            // Update setup status with academic year prerequisites
+            setSetupStatus((prev: any) => ({
+              ...prev,
+              modules: {
+                ...prev?.modules,
+                attendance: {
+                  ...prev?.modules?.attendance,
+                  prerequisites: {
+                    academic_year: ayData.data.hasActiveAY,
+                    classes: ayData.data.hasClasses,
+                    students: ayData.data.hasStudents
+                  },
+                  available: ayData.data.hasActiveAY && ayData.data.hasClasses && ayData.data.hasStudents
+                }
+              }
+            }));
+          }
         }
       } catch (error) {
         // Error fetching setup status
@@ -1258,6 +1290,40 @@ const TenantDashboard: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* Academic Year Management Module */}
+            <div className="bg-white overflow-hidden shadow-lg rounded-xl border border-gray-100 hover:shadow-xl transition-shadow">
+              <div className="p-6">
+                <div className="flex items-start space-x-4">
+                  <div className="flex-shrink-0">
+                    <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl flex items-center justify-center shadow-lg">
+                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Academic Year</h3>
+                    <div className="mb-3">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                        🚀 Ready to Setup
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Configure academic years to enable attendance system and organize school operations.
+                    </p>
+                  </div>
+                  <div className="flex-shrink-0">
+                    <button
+                      onClick={() => navigate('/academic-years')}
+                      className="bg-gradient-to-r from-amber-600 to-amber-700 text-white px-4 py-2 rounded-lg hover:from-amber-700 hover:to-amber-800 transition-all duration-200 shadow-md hover:shadow-lg"
+                    >
+                      Manage AY
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Prerequisites Status */}
@@ -1569,7 +1635,8 @@ function App() {
               <Route path="/domain-and-branding" element={<DomainAndBrandingPage />} />
               <Route path="/attendance" element={<AttendancePage />} />
               <Route path="/students" element={<StudentManagement />} />
-        <Route path="/classes" element={<ClassManagement />} />
+              <Route path="/classes" element={<ClassManagement />} />
+              <Route path="/academic-years" element={<AcademicYearManagement />} />
               <Route path="/super-admin/login" element={<SuperAdminLoginPage />} />
               <Route path="/super-admin/dashboard" element={<SuperAdminDashboard />} />
               <Route path="/super-admin" element={<Navigate to="/super-admin/login" replace />} />
