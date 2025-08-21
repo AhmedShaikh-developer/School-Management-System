@@ -88,47 +88,52 @@ const BrandingCustomization: React.FC<{ tenantId: string }> = ({ tenantId }) => 
         setBranding(response.data.data);
       }
     } catch (error) {
-      console.error('Error loading branding:', error);
+      // Error loading branding
     }
   };
 
   const loadColorPresets = async () => {
     try {
       const response = await axios.get(
-        `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/branding/colors/presets`
+        `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/branding/colors/presets`,
+        {
+          headers: {
+            'Authorization': `Bearer ${tenantToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
       );
       if (response.data.success) {
         setColorPresets(response.data.data);
       }
     } catch (error) {
-      console.error('Error loading color presets:', error);
+      // Error loading color presets
     }
   };
 
   const loadFonts = async () => {
     try {
       const response = await axios.get(
-        `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/branding/fonts/available`
+        `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/branding/fonts/available`,
+        {
+          headers: {
+            'Authorization': `Bearer ${tenantToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
       );
       if (response.data.success) {
         setFonts(response.data.data);
       }
     } catch (error) {
-      console.error('Error loading fonts:', error);
+      // Error loading fonts
     }
   };
 
   const handleSubmit = async (values: BrandingFormData, { setSubmitting }: any) => {
     setLoading(true);
     
-    // Debug: Log the values being sent
-    console.log('Submitting branding values:', values);
-    console.log('Values type check:', {
-      primary_color: typeof values.primary_color,
-      secondary_color: typeof values.secondary_color,
-      accent_color: typeof values.accent_color,
-      font_family: typeof values.font_family
-    });
+
     
     try {
       const response = await axios.put(
@@ -148,7 +153,6 @@ const BrandingCustomization: React.FC<{ tenantId: string }> = ({ tenantId }) => 
         toast.error(response.data.message || 'Failed to update branding');
       }
     } catch (error: any) {
-      console.error('Error updating branding:', error);
       toast.error(error.response?.data?.message || 'Failed to update branding');
     } finally {
       setLoading(false);
@@ -183,7 +187,6 @@ const BrandingCustomization: React.FC<{ tenantId: string }> = ({ tenantId }) => 
         toast.error(response.data.message || 'Failed to upload logo');
       }
     } catch (error: any) {
-      console.error('Error uploading logo:', error);
       toast.error(error.response?.data?.message || 'Failed to upload logo');
     } finally {
       setUploadingLogo(false);
@@ -212,7 +215,6 @@ const BrandingCustomization: React.FC<{ tenantId: string }> = ({ tenantId }) => 
         toast.error(response.data.message || 'Failed to delete logo');
       }
     } catch (error: any) {
-      console.error('Error deleting logo:', error);
       toast.error(error.response?.data?.message || 'Failed to delete logo');
     }
   };

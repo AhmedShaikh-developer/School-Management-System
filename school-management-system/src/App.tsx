@@ -457,7 +457,7 @@ const AttendancePage: React.FC = () => {
           setSettings(data.data);
         }
       } catch (error) {
-        console.error('Error fetching attendance settings:', error);
+        // Error fetching attendance settings
         setError('Failed to load attendance settings');
       } finally {
         setLoading(false);
@@ -864,7 +864,7 @@ const TenantDashboard: React.FC = () => {
           setSetupStatus(data.data);
         }
       } catch (error) {
-        console.error('Error fetching setup status:', error);
+        // Error fetching setup status
       } finally {
         setLoading(false);
       }
@@ -875,12 +875,10 @@ const TenantDashboard: React.FC = () => {
       
       // Prevent multiple calls in quick succession
       if ((window as any).unassignedCountFetching) {
-        console.log('🚫 Unassigned count fetch already in progress, skipping...');
         return;
       }
       
       (window as any).unassignedCountFetching = true;
-      console.log('🔄 Fetching unassigned students count...');
       
       try {
         const response = await fetch(`http://localhost:5000/api/students?status=all&class_id=unassigned&limit=1`, {
@@ -892,17 +890,13 @@ const TenantDashboard: React.FC = () => {
         
         if (response.ok) {
           const data = await response.json();
-          console.log('📊 Unassigned students API response:', data);
           if (data.success) {
             const count = data.data.pagination.total_students;
-            console.log(`🎯 Setting unassigned count to: ${count}`);
             setUnassignedStudentsCount(count);
           }
-        } else {
-          console.error('❌ API response not ok:', response.status, response.statusText);
         }
       } catch (error) {
-        console.error('Error fetching unassigned students count:', error);
+        // Error fetching unassigned students count
       } finally {
         // Clear the flag after a delay to prevent rapid successive calls
         setTimeout(() => {
@@ -911,7 +905,6 @@ const TenantDashboard: React.FC = () => {
       }
     };
 
-    console.log('🚀 App useEffect triggered - fetching setup status and unassigned count');
     fetchSetupStatus();
     fetchUnassignedStudentsCount();
   }, [tenantId]);
@@ -1426,7 +1419,7 @@ function App() {
       );
       applyBrandingCSS(response.data, `branding-${domain}`);
     } catch (error) {
-      console.error('Error loading tenant branding by domain:', error);
+      // Error loading tenant branding by domain
     } finally {
       setLoading(false);
     }
@@ -1434,8 +1427,22 @@ function App() {
 
   const loadTenantBrandingById = async (tenantId: string) => {
     try {
+      // Get the tenant token from localStorage
+      const token = localStorage.getItem('tenantToken');
+      
+      if (!token) {
+        // No token available, skip branding load
+        return;
+      }
+      
       const response = await axios.get(
-        `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/branding/${tenantId}`
+        `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/branding/${tenantId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
       );
       if (response.data.success) {
         const branding = response.data.data;
@@ -1443,7 +1450,7 @@ function App() {
         applyBrandingCSS(css, `branding-${tenantId}`);
       }
     } catch (error) {
-      console.error('Error loading tenant branding by ID:', error);
+      // Error loading tenant branding by ID
     }
   };
 
