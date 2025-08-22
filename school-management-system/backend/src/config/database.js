@@ -329,6 +329,7 @@ const createTenantDatabase = async (tenantId, schoolName, databaseName = null) =
         address TEXT,
         parent_id INTEGER,
         class_id INTEGER REFERENCES classes(id),
+        ay_id INTEGER REFERENCES academic_years(id),
         enrollment_date DATE DEFAULT CURRENT_DATE,
         status VARCHAR(20) DEFAULT 'active',
         photo_url VARCHAR(500),
@@ -577,6 +578,7 @@ const createTenantDatabase = async (tenantId, schoolName, databaseName = null) =
     await tenantClient.query(`
       CREATE INDEX idx_students_tenant_id ON students(tenant_id);
       CREATE INDEX idx_students_class_id ON students(class_id);
+      CREATE INDEX idx_students_ay_id ON students(ay_id);
       CREATE INDEX idx_classes_tenant_id ON classes(tenant_id);
       CREATE INDEX idx_attendance_student_date ON attendance(student_id, date);
       CREATE INDEX idx_attendance_class_date ON attendance(class_id, date);
@@ -818,10 +820,28 @@ const checkMigrationsNeeded = async () => {
       WHERE migration_name = 'add_tenant_id_columns_v1'
     `);
     
+    // Check if ay_id column migration has been applied
+    const ayIdMigration = await client.query(`
+      SELECT 1 FROM database_migrations 
+      WHERE migration_name = 'add_ay_id_column_v1'
+    `);
+    
+    // Check if previous_school column migration has been applied
+    const previousSchoolMigration = await client.query(`
+      SELECT 1 FROM database_migrations 
+      WHERE migration_name = 'add_previous_school_column_v1'
+    `);
+    
+    // Check if comprehensive student columns migration has been applied
+    const studentColumnsMigration = await client.query(`
+      SELECT 1 FROM database_migrations 
+      WHERE migration_name = 'add_comprehensive_student_columns_v1'
+    `);
+    
     client.release();
     
     // Return true if any migration is needed, false if all are applied
-    return attendanceMigration.rows.length === 0 || tenantIdMigration.rows.length === 0;
+    return attendanceMigration.rows.length === 0 || tenantIdMigration.rows.length === 0 || ayIdMigration.rows.length === 0 || previousSchoolMigration.rows.length === 0 || studentColumnsMigration.rows.length === 0;
     
   } catch (error) {
     console.error('Error checking migrations:', error);
@@ -863,6 +883,24 @@ const migrateTenantDatabases = async () => {
     const tenantIdMigration = await client.query(`
       SELECT 1 FROM database_migrations 
       WHERE migration_name = 'add_tenant_id_columns_v1'
+    `);
+    
+    // Check if ay_id column migration has already been applied
+    const ayIdMigration = await client.query(`
+      SELECT 1 FROM database_migrations 
+      WHERE migration_name = 'add_ay_id_column_v1'
+    `);
+    
+    // Check if previous_school column migration has already been applied
+    const previousSchoolMigration = await client.query(`
+      SELECT 1 FROM database_migrations 
+      WHERE migration_name = 'add_previous_school_column_v1'
+    `);
+    
+    // Check if comprehensive student columns migration has already been applied
+    const studentColumnsMigration = await client.query(`
+      SELECT 1 FROM database_migrations 
+      WHERE migration_name = 'add_comprehensive_student_columns_v1'
     `);
     
     // Get all tenant databases
@@ -934,6 +972,100 @@ const migrateTenantDatabases = async () => {
             }
           }
           
+          // Migration 3: Add ay_id column to students table if needed
+          if (ayIdMigration.rows.length === 0) {
+            // Check if students table has ay_id column
+            const ayIdColumnCheck = await tenantClient.query(`
+              SELECT column_name 
+              FROM information_schema.columns 
+              WHERE table_name = 'students' AND column_name = 'ay_id'
+            `);
+            
+            if (ayIdColumnCheck.rows.length === 0) {
+              // Add the ay_id column that references academic_years table
+              await tenantClient.query(`
+                ALTER TABLE students 
+                ADD COLUMN ay_id INTEGER REFERENCES academic_years(id)
+              `);
+              
+              // Auto-assign students to active academic year if one exists
+              const activeAY = await tenantClient.query(`
+                SELECT id FROM academic_years 
+                WHERE status = 'active' 
+                LIMIT 1
+              `);
+              
+              if (activeAY.rows.length > 0) {
+                await tenantClient.query(`
+                  UPDATE students 
+                  SET ay_id = $1 
+                  WHERE ay_id IS NULL
+                `, [activeAY.rows[0].id]);
+              }
+              
+              // Add index for ay_id column
+              try {
+                await tenantClient.query(`
+                  CREATE INDEX IF NOT EXISTS idx_students_ay_id ON students(ay_id);
+                `);
+              } catch (indexError) {
+                // Index might already exist, continue
+              }
+            }
+          }
+          
+          // Migration 4: Add previous_school column to students table if needed
+          if (previousSchoolMigration.rows.length === 0) {
+            // Check if students table has previous_school column
+            const previousSchoolColumnCheck = await tenantClient.query(`
+              SELECT column_name 
+              FROM information_schema.columns 
+              WHERE table_name = 'students' AND column_name = 'previous_school'
+            `);
+            
+            if (previousSchoolColumnCheck.rows.length === 0) {
+              // Add the previous_school column
+              await tenantClient.query(`
+                ALTER TABLE students 
+                ADD COLUMN previous_school VARCHAR(255)
+              `);
+            }
+          }
+          
+          // Migration 5: Add comprehensive student columns if needed
+          if (studentColumnsMigration.rows.length === 0) {
+            // Add all potentially missing student columns
+            const columnsToAdd = [
+              { name: 'photo_url', type: 'VARCHAR(500)' },
+              { name: 'biometric_data', type: 'JSONB' },
+              { name: 'emergency_contact_name', type: 'VARCHAR(100)' },
+              { name: 'emergency_contact_phone', type: 'VARCHAR(20)' },
+              { name: 'emergency_contact_relationship', type: 'VARCHAR(50)' },
+              { name: 'medical_conditions', type: 'TEXT' },
+              { name: 'allergies', type: 'TEXT' },
+              { name: 'blood_group', type: 'VARCHAR(5)' },
+              { name: 'nationality', type: 'VARCHAR(50)' },
+              { name: 'religion', type: 'VARCHAR(50)' },
+              { name: 'mother_tongue', type: 'VARCHAR(50)' }
+            ];
+            
+            for (const column of columnsToAdd) {
+              const columnCheck = await tenantClient.query(`
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'students' AND column_name = $1
+              `, [column.name]);
+              
+              if (columnCheck.rows.length === 0) {
+                await tenantClient.query(`
+                  ALTER TABLE students 
+                  ADD COLUMN ${column.name} ${column.type}
+                `);
+                console.log(`Added column ${column.name} to students table`);
+              }
+            }
+          }
+          
         } finally {
           tenantClient.release();
           tenantPool.end();
@@ -957,6 +1089,30 @@ const migrateTenantDatabases = async () => {
       await client.query(`
         INSERT INTO database_migrations (migration_name, status)
         VALUES ('add_tenant_id_columns_v1', 'completed')
+        ON CONFLICT (migration_name) DO NOTHING
+      `);
+    }
+    
+    if (ayIdMigration.rows.length === 0) {
+      await client.query(`
+        INSERT INTO database_migrations (migration_name, status)
+        VALUES ('add_ay_id_column_v1', 'completed')
+        ON CONFLICT (migration_name) DO NOTHING
+      `);
+    }
+    
+    if (previousSchoolMigration.rows.length === 0) {
+      await client.query(`
+        INSERT INTO database_migrations (migration_name, status)
+        VALUES ('add_previous_school_column_v1', 'completed')
+        ON CONFLICT (migration_name) DO NOTHING
+      `);
+    }
+    
+    if (studentColumnsMigration.rows.length === 0) {
+      await client.query(`
+        INSERT INTO database_migrations (migration_name, status)
+        VALUES ('add_comprehensive_student_columns_v1', 'completed')
         ON CONFLICT (migration_name) DO NOTHING
       `);
     }

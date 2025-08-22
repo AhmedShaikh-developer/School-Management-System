@@ -8,6 +8,7 @@ const {
   updateStudent,
   deleteStudent,
   uploadDocuments,
+  uploadPhoto,
   bulkImportStudents,
   transferStudent,
   generateStudentIdCard,
@@ -48,6 +49,12 @@ router.delete('/:studentId', (req, res) => {
 router.post('/:studentId/documents', upload.array('documents', 5), (req, res) => {
   req.tenantId = req.tenant.tenant_id;
   uploadDocuments(req, res);
+});
+
+// Photo upload
+router.post('/upload-photo', upload.single('photo'), (req, res) => {
+  req.tenantId = req.tenant.tenant_id;
+  uploadPhoto(req, res);
 });
 
 // Bulk operations

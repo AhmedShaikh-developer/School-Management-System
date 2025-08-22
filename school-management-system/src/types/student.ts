@@ -10,10 +10,13 @@ export interface Student {
   address?: string;
   parent_id?: number;
   class_id?: number | null | 'unassigned';
+  ay_id?: number | null; // Academic Year ID
   enrollment_date?: string | null;
   status?: string;
   class_name?: string;
   grade_level?: string;
+  photo_url?: string | null; // Student photo URL
+  biometric_data?: any | null; // Biometric data (JSON)
   emergency_contact_name?: string;
   emergency_contact_phone?: string;
   emergency_contact_relationship?: string;

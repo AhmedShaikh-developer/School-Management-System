@@ -51,8 +51,8 @@ app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Note: Logo files are now stored in database as binary data
-// No static file serving needed for uploads
+// Static file serving for student photos and documents
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Request timeout middleware (5 minutes)
 app.use((req, res, next) => {

@@ -397,18 +397,21 @@ const createStudent = async (req, res) => {
         studentId, studentData.first_name, studentData.last_name, studentData.email,
         studentData.phone || null, cleanDateOfBirth, studentData.gender || null,
         studentData.address || null, studentData.parent_id || null, studentData.class_id || null,
-        cleanEnrollmentDate, 'active'
+        studentData.ay_id || null, cleanEnrollmentDate, studentData.photo_url || null,
+        studentData.biometric_data || null, 'active'
       ];
       
       console.log('🔍 Insert query values:');
       console.log('  - class_id value (position 9):', insertValues[9], 'type:', typeof insertValues[9]);
+      console.log('  - ay_id value (position 10):', insertValues[10], 'type:', typeof insertValues[10]);
+      console.log('  - photo_url value (position 12):', insertValues[12], 'type:', typeof insertValues[12]);
       console.log('  - All values:', insertValues);
       
       const result = await client.query(`
         INSERT INTO students (
           student_id, first_name, last_name, email, phone, date_of_birth, 
-          gender, address, parent_id, class_id, enrollment_date, status
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          gender, address, parent_id, class_id, ay_id, enrollment_date, photo_url, biometric_data, status
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         RETURNING *
       `, insertValues);
       
@@ -486,7 +489,8 @@ const updateStudent = async (req, res) => {
              // Define allowed fields for updates
        const allowedFields = [
          'first_name', 'last_name', 'email', 'phone', 'date_of_birth', 
-         'gender', 'address', 'class_id', 'enrollment_date', 
+         'gender', 'address', 'class_id', 'ay_id', 'enrollment_date', 
+         'photo_url', 'biometric_data',
          'emergency_contact_name', 'emergency_contact_phone', 'emergency_contact_relationship',
          'medical_conditions', 'allergies', 'blood_group', 'nationality', 
          'religion', 'mother_tongue', 'previous_school'
@@ -784,6 +788,71 @@ const uploadDocuments = async (req, res) => {
   }
 };
 
+// Upload student photo
+const uploadPhoto = async (req, res) => {
+  try {
+    const { tenantId } = req;
+    
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: 'No photo uploaded'
+      });
+    }
+    
+    // Validate file type
+    if (!req.file.mimetype.startsWith('image/')) {
+      return res.status(400).json({
+        success: false,
+        error: 'Only image files are allowed'
+      });
+    }
+    
+    // Validate file size (5MB limit)
+    if (req.file.size > 5 * 1024 * 1024) {
+      return res.status(400).json({
+        success: false,
+        error: 'Photo size should be less than 5MB'
+      });
+    }
+    
+    // Generate a unique filename
+    const fileExtension = path.extname(req.file.originalname);
+    const fileName = `student_photo_${Date.now()}_${Math.random().toString(36).substring(2)}${fileExtension}`;
+    
+    // Move file to permanent location
+    const uploadDir = path.join(__dirname, '../../uploads/students/photos');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    
+    const finalPath = path.join(uploadDir, fileName);
+    fs.renameSync(req.file.path, finalPath);
+    
+    // Generate URL for the photo
+    const photoUrl = `/uploads/students/photos/${fileName}`;
+    
+    res.json({
+      success: true,
+      data: {
+        photo_url: photoUrl,
+        file_name: fileName,
+        file_size: req.file.size,
+        mime_type: req.file.mimetype
+      },
+      message: 'Photo uploaded successfully'
+    });
+    
+  } catch (error) {
+    console.error('Error uploading photo:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to upload photo',
+      details: error.message
+    });
+  }
+};
+
 // Bulk import students via CSV
 const bulkImportStudents = async (req, res) => {
   try {
@@ -981,22 +1050,22 @@ const bulkImportStudents = async (req, res) => {
           console.log(`  - All insert values:`, [
             studentId, row.first_name, row.last_name, row.email,
             row.phone || null, row.date_of_birth || null, row.gender || null,
-            row.address || null, classId,
-            row.enrollment_date || new Date(), 'active'
+            row.address || null, classId, row.ay_id || null,
+            row.enrollment_date || new Date(), row.photo_url || null, row.biometric_data || null, 'active'
           ]);
           
           // Insert student
           const result = await client.query(`
             INSERT INTO students (
               student_id, first_name, last_name, email, phone, date_of_birth,
-              gender, address, class_id, enrollment_date, status
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+              gender, address, class_id, ay_id, enrollment_date, photo_url, biometric_data, status
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
             RETURNING *
           `, [
             studentId, row.first_name, row.last_name, row.email,
             row.phone || null, row.date_of_birth || null, row.gender || null,
-            row.address || null, classId,
-            row.enrollment_date || new Date(), 'active'
+            row.address || null, classId, row.ay_id || null,
+            row.enrollment_date || new Date(), row.photo_url || null, row.biometric_data || null, 'active'
           ]);
           
           console.log(`Row ${rowNumber} inserted successfully:`, result.rows[0]);
@@ -1266,6 +1335,7 @@ module.exports = {
   updateStudent,
   deleteStudent,
   uploadDocuments,
+  uploadPhoto, // Add the new uploadPhoto function to exports
   bulkImportStudents,
   transferStudent,
   generateStudentIdCard,

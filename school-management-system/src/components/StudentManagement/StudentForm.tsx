@@ -20,7 +20,10 @@ const StudentForm: React.FC<StudentFormProps> = ({
     gender: '',
     address: '',
     class_id: undefined,
+    ay_id: null, // Academic Year ID
     enrollment_date: new Date().toISOString().split('T')[0],
+    photo_url: null, // Student photo URL
+    biometric_data: null, // Biometric data
     emergency_contact_name: '',
     emergency_contact_phone: '',
     emergency_contact_relationship: '',
@@ -38,6 +41,9 @@ const StudentForm: React.FC<StudentFormProps> = ({
   const [submitted, setSubmitted] = useState(false);
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [lastSavedData, setLastSavedData] = useState<string>('');
+  const [academicYears, setAcademicYears] = useState<Array<{ id: number; label: string; status: string }>>([]);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
   // Initialize form data
   useEffect(() => {
@@ -47,13 +53,92 @@ const StudentForm: React.FC<StudentFormProps> = ({
         class_id: student.class_id || undefined
       };
       setFormData(initialData);
+      
+             // Set photo preview if photo_url exists
+       if (student.photo_url) {
+         console.log('Setting photo preview from student data:', student.photo_url);
+         // Ensure the photo URL is properly formatted
+         const photoUrl = student.photo_url.startsWith('http') ? student.photo_url : `http://localhost:5000${student.photo_url}`;
+         console.log('Formatted photo URL:', photoUrl);
+         setPhotoPreview(photoUrl);
+       }
     } else {
       // For new students, auto-select the first class if only one exists
       if (classes.length === 1) {
         setFormData(prev => ({ ...prev, class_id: classes[0].id }));
       }
     }
+    
+    // Fetch academic years
+    fetchAcademicYears();
   }, [student, classes]);
+
+  // Fetch academic years
+  const fetchAcademicYears = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/academic-years', {
+        headers: {
+          'Authorization': `Bearer ${tenantToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setAcademicYears(data.data);
+          
+          // Auto-select active academic year for new students
+          if (!student) {
+            const activeAY = data.data.find((ay: any) => ay.status === 'active');
+            if (activeAY) {
+              setFormData(prev => ({ ...prev, ay_id: activeAY.id }));
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch academic years:', error);
+    }
+  };
+
+  // Handle photo file selection
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      console.log('Photo file selected:', file.name, 'Size:', file.size, 'Type:', file.type);
+      
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        toast.error('Please select an image file');
+        return;
+      }
+      
+      // Validate file size (5MB limit)
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('Photo size should be less than 5MB');
+        return;
+      }
+      
+      setPhotoFile(file);
+      
+      // Create preview
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const result = e.target?.result as string;
+        console.log('Photo preview created, size:', result?.length);
+        setPhotoPreview(result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Remove photo
+  const removePhoto = () => {
+    setPhotoFile(null);
+    setPhotoPreview(null);
+    setFormData(prev => ({ ...prev, photo_url: null }));
+  };
 
   // Auto-save functionality - only for existing students
   const autoSave = useCallback(async (data: Student) => {
@@ -221,6 +306,34 @@ const StudentForm: React.FC<StudentFormProps> = ({
         class_id: processedClassId
       };
 
+      // If there's a new photo file, upload it first
+      if (photoFile) {
+        console.log('Uploading photo file:', photoFile.name, 'Size:', photoFile.size);
+        const formDataPhoto = new FormData();
+        formDataPhoto.append('photo', photoFile);
+        
+        const photoResponse = await fetch('http://localhost:5000/api/students/upload-photo', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${tenantToken}`
+          },
+          body: formDataPhoto
+        });
+        
+        if (photoResponse.ok) {
+          const photoResult = await photoResponse.json();
+          console.log('Photo upload successful:', photoResult);
+          submitData.photo_url = photoResult.data.photo_url;
+        } else {
+          const errorData = await photoResponse.json();
+          console.error('Photo upload failed:', errorData);
+          toast.error('Failed to upload photo');
+          setLoading(false);
+          setSubmitted(false);
+          return;
+        }
+      }
+
       const url = student ? `http://localhost:5000/api/students/${student.id}` : 'http://localhost:5000/api/students';
       const method = student ? 'PUT' : 'POST';
       
@@ -314,7 +427,7 @@ const StudentForm: React.FC<StudentFormProps> = ({
 
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-      <div className="relative top-4 sm:top-20 mx-auto p-3 sm:p-5 border w-11/12 max-w-4xl shadow-lg rounded-md bg-white">
+      <div className="relative top-4 sm:top-20 mx-auto p-3 sm:p-5 border w-11/12 max-w-none shadow-lg rounded-md bg-white overflow-x-auto">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
           <h3 className="text-lg font-medium text-gray-900">
             {student ? 'Edit Student' : 'Add New Student'}
@@ -330,96 +443,96 @@ const StudentForm: React.FC<StudentFormProps> = ({
            </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
-          {/* Basic Information */}
-          <div className="bg-gray-50 p-3 sm:p-4 rounded-lg">
+        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6 xl:space-y-8 min-w-full">
+                     {/* Basic Information */}
+           <div className="bg-gray-50 p-3 sm:p-4 xl:p-6 rounded-lg w-full">
             <h4 className="text-md font-medium text-gray-900 mb-3 sm:mb-4">Basic Information</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">First Name *</label>
-                <input
-                  type="text"
-                  name="first_name"
-                  value={formData.first_name}
-                  onChange={handleInputChange}
-                  className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 ${
-                    errors.first_name ? 'border-red-500' : ''
-                  }`}
-                />
-                {errors.first_name && (
-                  <p className="mt-1 text-sm text-red-600">{errors.first_name}</p>
-                )}
-              </div>
+                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 xl:gap-6">
+               <div>
+                 <label className="block text-sm font-medium text-gray-700">First Name *</label>
+                 <input
+                   type="text"
+                   name="first_name"
+                   value={formData.first_name}
+                   onChange={handleInputChange}
+                   className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 ${
+                     errors.first_name ? 'border-red-500' : ''
+                   }`}
+                 />
+                 {errors.first_name && (
+                   <p className="mt-1 text-sm text-red-600">{errors.first_name}</p>
+                 )}
+               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Last Name *</label>
-                <input
-                  type="text"
-                  name="last_name"
-                  value={formData.last_name}
-                  onChange={handleInputChange}
-                  className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 ${
-                    errors.last_name ? 'border-red-500' : ''
-                  }`}
-                />
-                {errors.last_name && (
-                  <p className="mt-1 text-sm text-red-600">{errors.last_name}</p>
-                )}
-              </div>
+               <div>
+                 <label className="block text-sm font-medium text-gray-700">Last Name *</label>
+                 <input
+                   type="text"
+                   name="last_name"
+                   value={formData.last_name}
+                   onChange={handleInputChange}
+                   className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 ${
+                     errors.last_name ? 'border-red-500' : ''
+                   }`}
+                 />
+                 {errors.last_name && (
+                   <p className="mt-1 text-sm text-red-600">{errors.last_name}</p>
+                 )}
+               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Email *</label>
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleInputChange}
-                  className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 ${
-                    errors.email ? 'border-red-500' : ''
-                  }`}
-                />
-                {errors.email && (
-                  <p className="mt-1 text-sm text-red-600">{errors.email}</p>
-                )}
-              </div>
+               <div>
+                 <label className="block text-sm font-medium text-gray-700">Email *</label>
+                 <input
+                   type="email"
+                   name="email"
+                   value={formData.email}
+                   onChange={handleInputChange}
+                   className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 ${
+                     errors.email ? 'border-red-500' : ''
+                   }`}
+                 />
+                 {errors.email && (
+                   <p className="mt-1 text-sm text-red-600">{errors.email}</p>
+                 )}
+               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Phone</label>
-                <input
-                  type="tel"
-                  name="phone"
-                  value={formData.phone}
-                  onChange={handleInputChange}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
+               <div>
+                 <label className="block text-sm font-medium text-gray-700">Phone</label>
+                 <input
+                   type="tel"
+                   name="phone"
+                   value={formData.phone}
+                   onChange={handleInputChange}
+                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                 />
+               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Date of Birth</label>
-                <input
-                  type="date"
-                  name="date_of_birth"
-                  value={formData.date_of_birth || ''}
-                  onChange={handleInputChange}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
+               <div>
+                 <label className="block text-sm font-medium text-gray-700">Date of Birth</label>
+                 <input
+                   type="date"
+                   name="date_of_birth"
+                   value={formData.date_of_birth || ''}
+                   onChange={handleInputChange}
+                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                 />
+               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Gender</label>
-                <select
-                  name="gender"
-                  value={formData.gender}
-                  onChange={handleInputChange}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                >
-                  <option value="">Select gender</option>
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-            </div>
+               <div>
+                 <label className="block text-sm font-medium text-gray-700">Gender</label>
+                 <select
+                   name="gender"
+                   value={formData.gender}
+                   onChange={handleInputChange}
+                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                 >
+                   <option value="">Select gender</option>
+                   <option value="male">Male</option>
+                   <option value="female">Female</option>
+                   <option value="other">Other</option>
+                 </select>
+               </div>
+             </div>
 
             <div className="mt-4">
               <label className="block text-sm font-medium text-gray-700">Address</label>
@@ -433,14 +546,14 @@ const StudentForm: React.FC<StudentFormProps> = ({
             </div>
           </div>
 
-          {/* Academic Information */}
-          <div className="bg-gray-50 p-3 sm:p-4 rounded-lg">
+                     {/* Academic Information */}
+           <div className="bg-gray-50 p-3 sm:p-4 xl:p-6 rounded-lg w-full">
             <h4 className="text-md font-medium text-gray-900 mb-3 sm:mb-4">Academic Information</h4>
             
             {/* Class Selection Help */}
             {getClassSelectionHelp()}
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 xl:gap-6 mt-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Class Assignment *</label>
                                  <select
@@ -470,6 +583,29 @@ const StudentForm: React.FC<StudentFormProps> = ({
               </div>
 
               <div>
+                <label className="block text-sm font-medium text-gray-700">Academic Year *</label>
+                <select
+                  name="ay_id"
+                  value={formData.ay_id || ''}
+                  onChange={handleInputChange}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  required
+                >
+                  <option value="">Select academic year</option>
+                  {academicYears.map(ay => (
+                    <option key={ay.id} value={ay.id}>
+                      {ay.label} ({ay.status === 'active' ? 'Active' : ay.status})
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-gray-500">
+                  Select the academic year for this student.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 xl:gap-6 mt-4">
+              <div>
                 <label className="block text-sm font-medium text-gray-700">Enrollment Date</label>
                 <input
                   type="date"
@@ -479,9 +615,7 @@ const StudentForm: React.FC<StudentFormProps> = ({
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                 />
               </div>
-            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Previous School</label>
                 <input
@@ -492,7 +626,9 @@ const StudentForm: React.FC<StudentFormProps> = ({
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                 />
               </div>
+            </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 xl:gap-6 mt-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Mother Tongue</label>
                 <input
@@ -503,13 +639,86 @@ const StudentForm: React.FC<StudentFormProps> = ({
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                 />
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Biometric Data</label>
+                <textarea
+                  name="biometric_data"
+                  value={formData.biometric_data ? JSON.stringify(formData.biometric_data, null, 2) : ''}
+                  onChange={(e) => {
+                    try {
+                      const value = e.target.value.trim();
+                      if (value) {
+                        const parsed = JSON.parse(value);
+                        setFormData(prev => ({ ...prev, biometric_data: parsed }));
+                      } else {
+                        setFormData(prev => ({ ...prev, biometric_data: null }));
+                      }
+                    } catch (error) {
+                      // Invalid JSON, don't update
+                    }
+                  }}
+                  rows={3}
+                  placeholder="Enter biometric data in JSON format (optional)"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Enter biometric data in valid JSON format (e.g., &#123;"fingerprint": "data", "face": "data"&#125;)
+                </p>
+              </div>
             </div>
           </div>
 
-          {/* Emergency Contact */}
-          <div className="bg-gray-50 p-3 sm:p-4 rounded-lg">
+                                {/* Photo Upload */}
+           <div className="bg-gray-50 p-3 sm:p-4 xl:p-6 rounded-lg w-full">
+             <h4 className="text-md font-medium text-gray-900 mb-3 sm:mb-4">Student Photo</h4>
+             <div className="space-y-4 overflow-hidden max-w-full">
+                             {/* Current Photo Display */}
+               {photoPreview && (
+                 <div className="flex items-center space-x-4 max-w-full">
+                   <div className="relative w-20 h-20 overflow-hidden rounded-lg border-2 border-gray-200 flex-shrink-0">
+                     <img 
+                       src={photoPreview} 
+                       alt="Student photo" 
+                       className="w-full h-full object-cover"
+                       onError={(e) => {
+                         console.error('Error loading image:', e);
+                         setPhotoPreview(null);
+                       }}
+                     />
+                   </div>
+                   <button
+                     type="button"
+                     onClick={removePhoto}
+                     className="text-red-600 hover:text-red-800 text-sm font-medium flex-shrink-0"
+                   >
+                     Remove Photo
+                   </button>
+                 </div>
+               )}
+              
+              {/* Photo Upload Input */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {photoPreview ? 'Change Photo' : 'Upload Photo'}
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoChange}
+                  className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Accepted formats: JPG, PNG, GIF. Maximum size: 5MB.
+                </p>
+              </div>
+            </div>
+          </div>
+
+                     {/* Emergency Contact */}
+           <div className="bg-gray-50 p-3 sm:p-4 xl:p-6 rounded-lg w-full">
             <h4 className="text-md font-medium text-gray-900 mb-3 sm:mb-4">Emergency Contact</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 xl:gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Contact Name</label>
                 <input
@@ -545,10 +754,10 @@ const StudentForm: React.FC<StudentFormProps> = ({
             </div>
           </div>
 
-          {/* Medical Information */}
-          <div className="bg-gray-50 p-3 sm:p-4 rounded-lg">
+                     {/* Medical Information */}
+           <div className="bg-gray-50 p-3 sm:p-4 xl:p-6 rounded-lg w-full">
             <h4 className="text-md font-medium text-gray-900 mb-3 sm:mb-4">Medical Information</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 xl:gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Blood Group</label>
                 <select
@@ -592,7 +801,7 @@ const StudentForm: React.FC<StudentFormProps> = ({
               </div>
             </div>
 
-            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 xl:gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Medical Conditions</label>
                 <textarea
