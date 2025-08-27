@@ -6,6 +6,7 @@ const fs = require('fs');
 // Helper function to get tenant database name
 const getTenantDatabaseName = async (tenantId) => {
   const client = await mainPool.connect();
+  
   try {
     const dbNameResult = await client.query(
       'SELECT database_name FROM tenants WHERE tenant_id = $1',
@@ -114,7 +115,7 @@ const calculateDiscountsAndScholarships = async (client, studentId, classId, amo
 // Get all fee structures
 const getFeeStructures = async (req, res) => {
   try {
-    const { tenantId } = req;
+    const { tenant_id: tenantId } = req.tenant;
     const { page = 1, limit = 20, class_id, ay_id } = req.query;
     
     const tenantDbName = await getTenantDatabaseName(tenantId);
@@ -189,7 +190,7 @@ const getFeeStructures = async (req, res) => {
 // Create fee structure
 const createFeeStructure = async (req, res) => {
   try {
-    const { tenantId } = req;
+    const { tenant_id: tenantId } = req.tenant;
     const {
       class_id,
       ay_id,
@@ -275,7 +276,7 @@ const createFeeStructure = async (req, res) => {
 // Update fee structure
 const updateFeeStructure = async (req, res) => {
   try {
-    const { tenantId } = req;
+    const { tenant_id: tenantId } = req.tenant;
     const { id } = req.params;
     const {
       tuition_fee,
@@ -357,7 +358,7 @@ const updateFeeStructure = async (req, res) => {
 // Delete fee structure
 const deleteFeeStructure = async (req, res) => {
   try {
-    const { tenantId } = req;
+    const { tenant_id: tenantId } = req.tenant;
     const { id } = req.params;
     
     const tenantDbName = await getTenantDatabaseName(tenantId);
@@ -415,7 +416,7 @@ const deleteFeeStructure = async (req, res) => {
 // Generate vouchers for students
 const generateVouchers = async (req, res) => {
   try {
-    const { tenantId } = req;
+    const { tenant_id: tenantId } = req.tenant;
     const { class_ids, ay_id, installment_number, due_date } = req.body;
     
     if (!class_ids || !ay_id || !installment_number || !due_date) {
@@ -523,7 +524,7 @@ const generateVouchers = async (req, res) => {
 // Get vouchers
 const getVouchers = async (req, res) => {
   try {
-    const { tenantId } = req;
+    const { tenant_id: tenantId } = req.tenant;
     const { 
       page = 1, 
       limit = 20, 
@@ -631,7 +632,7 @@ const getVouchers = async (req, res) => {
 // Record payment
 const recordPayment = async (req, res) => {
   try {
-    const { tenantId } = req;
+    const { tenant_id: tenantId } = req.tenant;
     const {
       voucher_id,
       amount_paid,
@@ -729,7 +730,7 @@ const recordPayment = async (req, res) => {
 // Get payments
 const getPayments = async (req, res) => {
   try {
-    const { tenantId } = req;
+    const { tenant_id: tenantId } = req.tenant;
     const { 
       page = 1, 
       limit = 20, 
@@ -840,7 +841,7 @@ const getPayments = async (req, res) => {
 // Get discounts
 const getDiscounts = async (req, res) => {
   try {
-    const { tenantId } = req;
+    const { tenant_id: tenantId } = req.tenant;
     const { page = 1, limit = 20, is_active } = req.query;
     
     const tenantDbName = await getTenantDatabaseName(tenantId);
@@ -901,7 +902,7 @@ const getDiscounts = async (req, res) => {
 // Create discount
 const createDiscount = async (req, res) => {
   try {
-    const { tenantId } = req;
+    const { tenant_id: tenantId } = req.tenant;
     const {
       name,
       type,
@@ -964,7 +965,7 @@ const createDiscount = async (req, res) => {
 // Update discount
 const updateDiscount = async (req, res) => {
   try {
-    const { tenantId } = req;
+    const { tenant_id: tenantId } = req.tenant;
     const { id } = req.params;
     const {
       name,
@@ -1030,7 +1031,7 @@ const updateDiscount = async (req, res) => {
 
 const deleteDiscount = async (req, res) => {
   try {
-    const { tenantId } = req;
+    const { tenant_id: tenantId } = req.tenant;
     const { id } = req.params;
 
     const tenantDbName = await getTenantDatabaseName(tenantId);
@@ -1075,7 +1076,7 @@ const deleteDiscount = async (req, res) => {
 // Get scholarships
 const getScholarships = async (req, res) => {
   try {
-    const { tenantId } = req;
+    const { tenant_id: tenantId } = req.tenant;
     const { page = 1, limit = 20, is_active } = req.query;
     
     const tenantDbName = await getTenantDatabaseName(tenantId);
@@ -1136,7 +1137,7 @@ const getScholarships = async (req, res) => {
 // Create scholarship
 const createScholarship = async (req, res) => {
   try {
-    const { tenantId } = req;
+    const { tenant_id: tenantId } = req.tenant;
     const {
       name,
       type,
@@ -1193,7 +1194,7 @@ const createScholarship = async (req, res) => {
 // Assign scholarship to student
 const assignScholarship = async (req, res) => {
   try {
-    const { tenantId } = req;
+    const { tenant_id: tenantId } = req.tenant;
     const {
       student_id,
       scholarship_id,
@@ -1273,7 +1274,7 @@ const assignScholarship = async (req, res) => {
 
 const updateScholarship = async (req, res) => {
   try {
-    const { tenantId } = req;
+    const { tenant_id: tenantId } = req.tenant;
     const { id } = req.params;
     const {
       scholarship_name,
@@ -1354,7 +1355,7 @@ const updateScholarship = async (req, res) => {
 
 const deleteScholarship = async (req, res) => {
   try {
-    const { tenantId } = req;
+    const { tenant_id: tenantId } = req.tenant;
     const { id } = req.params;
 
     const tenantDbName = await getTenantDatabaseName(tenantId);
@@ -1395,7 +1396,7 @@ const deleteScholarship = async (req, res) => {
 // Get student scholarships
 const getStudentScholarships = async (req, res) => {
   try {
-    const { tenantId } = req;
+    const { tenant_id: tenantId } = req.tenant;
     const { page = 1, limit = 10 } = req.query;
 
     const tenantDbName = await getTenantDatabaseName(tenantId);
@@ -1450,7 +1451,7 @@ const getStudentScholarships = async (req, res) => {
 // Send overdue fee reminders
 const sendOverdueReminders = async (req, res) => {
   try {
-    const { tenantId } = req;
+    const { tenant_id: tenantId } = req.tenant;
     
     const result = await feeReminderService.sendOverdueReminders(tenantId);
     
@@ -1472,7 +1473,7 @@ const sendOverdueReminders = async (req, res) => {
 // Send upcoming due reminders
 const sendUpcomingReminders = async (req, res) => {
   try {
-    const { tenantId } = req;
+    const { tenant_id: tenantId } = req.tenant;
     const { days_ahead = 3 } = req.query;
     
     const result = await feeReminderService.sendUpcomingDueReminders(tenantId, parseInt(days_ahead));
@@ -1495,7 +1496,7 @@ const sendUpcomingReminders = async (req, res) => {
 // Get reminder history
 const getReminderHistory = async (req, res) => {
   try {
-    const { tenantId } = req;
+    const { tenant_id: tenantId } = req.tenant;
     const { 
       page = 1, 
       limit = 20, 
@@ -1588,7 +1589,7 @@ const getReminderHistory = async (req, res) => {
 
 const getFeeStats = async (req, res) => {
   try {
-    const { tenantId } = req;
+    const { tenant_id: tenantId } = req.tenant;
     const { period = 'current_month', class_id = 'all' } = req.query;
 
     const tenantDbName = await getTenantDatabaseName(tenantId);
@@ -1675,7 +1676,7 @@ const getFeeStats = async (req, res) => {
 
 const getMonthlyFeeData = async (req, res) => {
   try {
-    const { tenantId } = req;
+    const { tenant_id: tenantId } = req.tenant;
     const { period = 'current_month', class_id = 'all' } = req.query;
 
     const tenantDbName = await getTenantDatabaseName(tenantId);
