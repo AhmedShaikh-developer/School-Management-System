@@ -38,6 +38,7 @@ const getClasses = async (req, res) => {
       const result = await client.query(`
         SELECT 
           id, 
+          tenant_id,
           class_name, 
           grade_level, 
           section, 
@@ -47,8 +48,9 @@ const getClasses = async (req, res) => {
           created_at,
           updated_at
         FROM classes 
+        WHERE tenant_id = $1
         ORDER BY grade_level, class_name, section
-      `);
+      `, [tenantId]);
 
       res.json({
         success: true,
@@ -88,6 +90,7 @@ const getClass = async (req, res) => {
       const result = await client.query(`
         SELECT 
           id, 
+          tenant_id,
           class_name, 
           grade_level, 
           section, 
@@ -97,8 +100,8 @@ const getClass = async (req, res) => {
           created_at,
           updated_at
         FROM classes 
-        WHERE id = $1
-      `, [classId]);
+        WHERE id = $1 AND tenant_id = $2
+      `, [classId, tenantId]);
 
       if (result.rows.length === 0) {
         return res.status(404).json({
@@ -156,10 +159,10 @@ const createClass = async (req, res) => {
       }
 
       const result = await client.query(`
-        INSERT INTO classes (class_name, grade_level, section, capacity, academic_year, status, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        RETURNING id, class_name, grade_level, section, capacity, academic_year, status, created_at, updated_at
-      `, [class_name, grade_level, section || null, capacity || null, academic_year || null]);
+        INSERT INTO classes (tenant_id, class_name, grade_level, section, capacity, academic_year, status, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        RETURNING id, tenant_id, class_name, grade_level, section, capacity, academic_year, status, created_at, updated_at
+      `, [tenantId, class_name, grade_level, section || null, capacity || null, academic_year || null]);
 
       res.status(201).json({
         success: true,

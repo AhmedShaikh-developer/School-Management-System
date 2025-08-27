@@ -13,6 +13,7 @@ import OnboardingSuccess from './components/OnboardingSuccess';
 import StudentManagement from './components/StudentManagement/StudentManagement';
 import ClassManagement from './components/ClassManagement/ClassManagement';
 import AcademicYearManagement from './components/AcademicYearManagement/AcademicYearManagement';
+import FeeManagement from './components/FeeManagement/FeeManagement';
 
 import axios from 'axios';
 import './App.css';
@@ -1360,6 +1361,40 @@ const TenantDashboard: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* Fee Management Module */}
+            <div className="bg-white overflow-hidden shadow-lg rounded-xl border border-gray-100 hover:shadow-xl transition-shadow">
+              <div className="p-6">
+                <div className="flex items-start space-x-4">
+                  <div className="flex-shrink-0">
+                    <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg">
+                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Fee Management</h3>
+                    <div className="mb-3">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+                        🚀 Ready to Setup
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Manage fee structures, generate vouchers, process payments, and send reminders.
+                    </p>
+                  </div>
+                  <div className="flex-shrink-0">
+                    <button
+                      onClick={() => navigate('/fees')}
+                      className="bg-gradient-to-r from-emerald-600 to-emerald-700 text-white px-4 py-2 rounded-lg hover:from-emerald-700 hover:to-emerald-800 transition-all duration-200 shadow-md hover:shadow-lg"
+                    >
+                      Manage Fees
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Prerequisites Status */}
@@ -1673,6 +1708,7 @@ function App() {
               <Route path="/students" element={<StudentManagement />} />
               <Route path="/classes" element={<ClassManagement />} />
               <Route path="/academic-years" element={<AcademicYearManagement />} />
+              <Route path="/fees" element={<FeeManagement />} />
               <Route path="/super-admin/login" element={<SuperAdminLoginPage />} />
               <Route path="/super-admin/dashboard" element={<SuperAdminDashboard />} />
               <Route path="/super-admin" element={<Navigate to="/super-admin/login" replace />} />

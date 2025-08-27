@@ -77,17 +77,41 @@ class AcademicYear {
       id: this.id
     });
     
-    const query = `
-      SELECT id, label, start_date, end_date, status FROM academic_years 
-      WHERE tenant_id = $1 
-        AND status IN ('draft', 'active')
-        AND (
-          (start_date <= $2 AND end_date >= $2) OR
-          (start_date <= $3 AND end_date >= $3) OR
-          (start_date >= $2 AND end_date <= $3)
-        )
-        AND id != COALESCE($4, 0)
-    `;
+    // First check if the label column exists
+    const columnCheck = await client.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'academic_years' AND column_name = 'label'
+    `);
+    
+    let query;
+    if (columnCheck.rows.length > 0) {
+      // Table has label column
+      query = `
+        SELECT id, label, start_date, end_date, status FROM academic_years 
+        WHERE tenant_id = $1 
+          AND status IN ('draft', 'active')
+          AND (
+            (start_date <= $2 AND end_date >= $2) OR
+            (start_date <= $3 AND end_date >= $3) OR
+            (start_date >= $2 AND end_date <= $3)
+          )
+          AND id != COALESCE($4, 0)
+      `;
+    } else {
+      // Table doesn't have label column yet, use year_name instead
+      query = `
+        SELECT id, year_name, start_date, end_date, status FROM academic_years 
+        WHERE tenant_id = $1 
+          AND status IN ('draft', 'active')
+          AND (
+            (start_date <= $2 AND end_date >= $2) OR
+            (start_date <= $3 AND end_date >= $3) OR
+            (start_date >= $2 AND end_date <= $3)
+          )
+          AND id != COALESCE($4, 0)
+      `;
+    }
     
     const result = await client.query(query, [
       this.tenantId, 
@@ -100,7 +124,8 @@ class AcademicYear {
     
     if (result.rows.length > 0) {
       console.error('❌ Found overlapping academic years:', result.rows);
-      throw new Error(`Academic year dates overlap with existing academic years: ${result.rows.map(r => r.label).join(', ')}`);
+      const nameField = columnCheck.rows.length > 0 ? 'label' : 'year_name';
+      throw new Error(`Academic year dates overlap with existing academic years: ${result.rows.map(r => r[nameField]).join(', ')}`);
     }
     
     return true;
@@ -148,20 +173,53 @@ class AcademicYear {
         `, [tenantId]);
       }
       
-      const result = await client.query(`
-        INSERT INTO academic_years (
-          tenant_id, label, start_date, end_date, status, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-        RETURNING *
-      `, [
-        academicYear.tenantId,
-        academicYear.label,
-        academicYear.startDate,
-        academicYear.endDate,
-        academicYear.status,
-        academicYear.createdAt,
-        academicYear.updatedAt
-      ]);
+      // Check if year_name column exists in this tenant's academic_years table
+      const yearNameColumnCheck = await client.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'academic_years' AND column_name = 'year_name'
+      `);
+      
+      let insertQuery, insertValues;
+      
+      if (yearNameColumnCheck.rows.length > 0) {
+        // Table has year_name column, include it in INSERT
+        insertQuery = `
+          INSERT INTO academic_years (
+            tenant_id, label, year_name, start_date, end_date, status, created_at, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          RETURNING *
+        `;
+        insertValues = [
+          academicYear.tenantId,
+          academicYear.label,
+          academicYear.label, // Use label as year_name
+          academicYear.startDate,
+          academicYear.endDate,
+          academicYear.status,
+          academicYear.createdAt,
+          academicYear.updatedAt
+        ];
+      } else {
+        // Table doesn't have year_name column, use standard INSERT
+        insertQuery = `
+          INSERT INTO academic_years (
+            tenant_id, label, start_date, end_date, status, created_at, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+          RETURNING *
+        `;
+        insertValues = [
+          academicYear.tenantId,
+          academicYear.label,
+          academicYear.startDate,
+          academicYear.endDate,
+          academicYear.status,
+          academicYear.createdAt,
+          academicYear.updatedAt
+        ];
+      }
+      
+      const result = await client.query(insertQuery, insertValues);
       
       await client.query('COMMIT');
       
@@ -190,10 +248,21 @@ class AcademicYear {
     }
     
     try {
-      const result = await client.query(`
-        SELECT * FROM academic_years 
-        WHERE id = $1 AND tenant_id = $2
-      `, [id, tenantId]);
+      let result;
+      try {
+        // First try with tenant_id filter
+        result = await client.query(`
+          SELECT * FROM academic_years 
+          WHERE id = $1 AND tenant_id = $2
+        `, [id, tenantId]);
+      } catch (error) {
+        // If tenant_id column doesn't exist, try without it
+        console.log('tenant_id column not found in academic_years, trying without filter');
+        result = await client.query(`
+          SELECT * FROM academic_years 
+          WHERE id = $1
+        `, [id]);
+      }
       
       return result.rows[0] || null;
     } finally {
@@ -211,11 +280,22 @@ class AcademicYear {
     const client = await tenantPool.connect();
     
     try {
-      const result = await client.query(`
-        SELECT * FROM academic_years 
-        WHERE tenant_id = $1 
-        ORDER BY start_date DESC
-      `, [tenantId]);
+      let result;
+      try {
+        // First try with tenant_id filter
+        result = await client.query(`
+          SELECT * FROM academic_years 
+          WHERE tenant_id = $1 
+          ORDER BY start_date DESC
+        `, [tenantId]);
+      } catch (error) {
+        // If tenant_id column doesn't exist, try without it
+        console.log('tenant_id column not found in academic_years, trying without filter');
+        result = await client.query(`
+          SELECT * FROM academic_years 
+          ORDER BY start_date DESC
+        `);
+      }
       
       return result.rows;
     } finally {
@@ -231,11 +311,23 @@ class AcademicYear {
     const client = await tenantPool.connect();
     
     try {
-      const result = await client.query(`
-        SELECT * FROM academic_years 
-        WHERE tenant_id = $1 AND status = 'active'
-        LIMIT 1
-      `, [tenantId]);
+      let result;
+      try {
+        // First try with tenant_id filter
+        result = await client.query(`
+          SELECT * FROM academic_years 
+          WHERE tenant_id = $1 AND status = 'active'
+          LIMIT 1
+        `, [tenantId]);
+      } catch (error) {
+        // If tenant_id column doesn't exist, try without it
+        console.log('tenant_id column not found in academic_years, trying without filter');
+        result = await client.query(`
+          SELECT * FROM academic_years 
+          WHERE status = 'active'
+          LIMIT 1
+        `);
+      }
       
       return result.rows[0] || null;
     } finally {
@@ -494,12 +586,24 @@ class AcademicYear {
     const client = await tenantPool.connect();
     
     try {
-      // Check if active academic year exists
-      const activeAY = await client.query(`
-        SELECT id FROM academic_years 
-        WHERE tenant_id = $1 AND status = 'active'
-        LIMIT 1
-      `, [tenantId]);
+      // Check if active academic year exists - handle both with and without tenant_id column
+      let activeAY;
+      try {
+        // First try with tenant_id filter
+        activeAY = await client.query(`
+          SELECT id FROM academic_years 
+          WHERE tenant_id = $1 AND status = 'active'
+          LIMIT 1
+        `, [tenantId]);
+      } catch (error) {
+        // If tenant_id column doesn't exist, try without it
+        console.log('tenant_id column not found in academic_years, trying without filter');
+        activeAY = await client.query(`
+          SELECT id FROM academic_years 
+          WHERE status = 'active'
+          LIMIT 1
+        `);
+      }
       
       const hasActiveAY = activeAY.rows.length > 0;
       

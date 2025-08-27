@@ -314,7 +314,57 @@ const createTenantDatabase = async (tenantId, schoolName, databaseName = null) =
       )
     `);
 
-    // Create students table (extended)
+    // Create teachers table FIRST (before classes table)
+    await tenantClient.query(`
+      CREATE TABLE teachers (
+        id SERIAL PRIMARY KEY,
+        teacher_id VARCHAR(50) UNIQUE NOT NULL,
+        first_name VARCHAR(100) NOT NULL,
+        last_name VARCHAR(100) NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        phone VARCHAR(20),
+        qualification TEXT,
+        experience_years INTEGER,
+        subjects TEXT[],
+        status VARCHAR(20) DEFAULT 'active',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create classes table (after teachers table)
+    await tenantClient.query(`
+      CREATE TABLE classes (
+        id SERIAL PRIMARY KEY,
+        tenant_id VARCHAR(50) NOT NULL,
+        class_name VARCHAR(100) NOT NULL,
+        grade_level VARCHAR(50) NOT NULL,
+        section VARCHAR(50),
+        capacity INTEGER DEFAULT 30,
+        teacher_id INTEGER REFERENCES teachers(id),
+        academic_year VARCHAR(20),
+        status VARCHAR(20) DEFAULT 'active',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create academic years table FIRST (before students table)
+    await tenantClient.query(`
+      CREATE TABLE academic_years (
+        id SERIAL PRIMARY KEY,
+        tenant_id VARCHAR(50) NOT NULL,
+        label VARCHAR(50) NOT NULL,
+        year_name VARCHAR(50) NOT NULL,
+        start_date DATE NOT NULL,
+        end_date DATE NOT NULL,
+        status VARCHAR(20) DEFAULT 'active',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create students table (extended) - NOW with valid references
     await tenantClient.query(`
       CREATE TABLE students (
         id SERIAL PRIMARY KEY,
@@ -405,53 +455,9 @@ const createTenantDatabase = async (tenantId, schoolName, databaseName = null) =
       )
     `);
 
-    // Create teachers table (extended)
-    await tenantClient.query(`
-      CREATE TABLE teachers (
-        id SERIAL PRIMARY KEY,
-        teacher_id VARCHAR(50) UNIQUE NOT NULL,
-        first_name VARCHAR(100) NOT NULL,
-        last_name VARCHAR(100) NOT NULL,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        phone VARCHAR(20),
-        qualification TEXT,
-        experience_years INTEGER,
-        subjects TEXT[],
-        status VARCHAR(20) DEFAULT 'active',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
 
-    // Create classes table (extended)
-    await tenantClient.query(`
-      CREATE TABLE classes (
-        id SERIAL PRIMARY KEY,
-        tenant_id VARCHAR(50) NOT NULL,
-        class_name VARCHAR(100) NOT NULL,
-        grade_level VARCHAR(50) NOT NULL,
-        section VARCHAR(50),
-        capacity INTEGER DEFAULT 30,
-        teacher_id INTEGER REFERENCES teachers(id),
-        academic_year VARCHAR(20),
-        status VARCHAR(20) DEFAULT 'active',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
 
-    // Create academic years table
-    await tenantClient.query(`
-      CREATE TABLE academic_years (
-        id SERIAL PRIMARY KEY,
-        year_name VARCHAR(50) NOT NULL,
-        start_date DATE NOT NULL,
-        end_date DATE NOT NULL,
-        status VARCHAR(20) DEFAULT 'active',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
+
 
     // Create attendance configuration table
     await tenantClient.query(`
@@ -574,12 +580,234 @@ const createTenantDatabase = async (tenantId, schoolName, databaseName = null) =
       )
     `);
 
+    // Create fee management tables
+    
+    // Fee structures table
+    await tenantClient.query(`
+      CREATE TABLE fee_structures (
+        id SERIAL PRIMARY KEY,
+        class_id INTEGER REFERENCES classes(id),
+        ay_id INTEGER REFERENCES academic_years(id),
+        tuition_fee DECIMAL(10,2) NOT NULL DEFAULT 0,
+        library_fee DECIMAL(10,2) DEFAULT 0,
+        lab_fee DECIMAL(10,2) DEFAULT 0,
+        sports_fee DECIMAL(10,2) DEFAULT 0,
+        transport_fee DECIMAL(10,2) DEFAULT 0,
+        examination_fee DECIMAL(10,2) DEFAULT 0,
+        development_fee DECIMAL(10,2) DEFAULT 0,
+        other_fees JSONB, -- Array of {name, amount, is_optional, description}
+        total_annual_fee DECIMAL(10,2) NOT NULL,
+        installments INTEGER DEFAULT 1,
+        installment_amount DECIMAL(10,2) NOT NULL,
+        due_dates JSONB, -- Array of due dates
+        status VARCHAR(20) DEFAULT 'active',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(class_id, ay_id)
+      )
+    `);
+
+    // Fee vouchers table
+    await tenantClient.query(`
+      CREATE TABLE fee_vouchers (
+        id SERIAL PRIMARY KEY,
+        voucher_number VARCHAR(50) UNIQUE NOT NULL,
+        student_id INTEGER REFERENCES students(id),
+        class_id INTEGER REFERENCES classes(id),
+        ay_id INTEGER REFERENCES academic_years(id),
+        fee_structure_id INTEGER REFERENCES fee_structures(id),
+        installment_number INTEGER NOT NULL,
+        due_date DATE NOT NULL,
+        amount_due DECIMAL(10,2) NOT NULL,
+        discount_amount DECIMAL(10,2) DEFAULT 0,
+        scholarship_amount DECIMAL(10,2) DEFAULT 0,
+        final_amount DECIMAL(10,2) NOT NULL,
+        amount_paid DECIMAL(10,2) DEFAULT 0,
+        balance_amount DECIMAL(10,2) NOT NULL,
+        status VARCHAR(20) DEFAULT 'pending', -- pending, paid, overdue, cancelled
+        generated_date DATE DEFAULT CURRENT_DATE,
+        generated_by INTEGER REFERENCES users(id),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Fee payments table
+    await tenantClient.query(`
+      CREATE TABLE fee_payments (
+        id SERIAL PRIMARY KEY,
+        voucher_id INTEGER REFERENCES fee_vouchers(id),
+        student_id INTEGER REFERENCES students(id),
+        payment_date DATE NOT NULL,
+        amount_paid DECIMAL(10,2) NOT NULL,
+        payment_method VARCHAR(20) NOT NULL, -- cash, online, cheque, bank_transfer
+        transaction_id VARCHAR(100),
+        gateway_reference VARCHAR(100),
+        receipt_number VARCHAR(50) UNIQUE NOT NULL,
+        notes TEXT,
+        processed_by INTEGER REFERENCES users(id),
+        gateway_response JSONB,
+        status VARCHAR(20) DEFAULT 'completed', -- pending, completed, failed, refunded
+        refund_amount DECIMAL(10,2) DEFAULT 0,
+        refund_date DATE,
+        refund_reason TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Discounts table
+    await tenantClient.query(`
+      CREATE TABLE discounts (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        type VARCHAR(20) NOT NULL, -- percentage, fixed
+        value DECIMAL(10,2) NOT NULL,
+        applicable_to VARCHAR(20) NOT NULL, -- all, class, student
+        class_ids INTEGER[],
+        student_ids INTEGER[],
+        max_amount DECIMAL(10,2),
+        valid_from DATE NOT NULL,
+        valid_to DATE NOT NULL,
+        is_active BOOLEAN DEFAULT TRUE,
+        description TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Scholarships table
+    await tenantClient.query(`
+      CREATE TABLE scholarships (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        type VARCHAR(20) NOT NULL, -- percentage, fixed
+        value DECIMAL(10,2) NOT NULL,
+        criteria TEXT NOT NULL,
+        max_students INTEGER,
+        current_recipients INTEGER DEFAULT 0,
+        valid_from DATE NOT NULL,
+        valid_to DATE NOT NULL,
+        is_active BOOLEAN DEFAULT TRUE,
+        description TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Student scholarships table
+    await tenantClient.query(`
+      CREATE TABLE student_scholarships (
+        id SERIAL PRIMARY KEY,
+        student_id INTEGER REFERENCES students(id),
+        scholarship_id INTEGER REFERENCES scholarships(id),
+        awarded_date DATE NOT NULL,
+        amount DECIMAL(10,2) NOT NULL,
+        valid_from DATE NOT NULL,
+        valid_to DATE NOT NULL,
+        status VARCHAR(20) DEFAULT 'active', -- active, suspended, expired
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(student_id, scholarship_id, valid_from)
+      )
+    `);
+
+    // Fee reminders table
+    await tenantClient.query(`
+      CREATE TABLE fee_reminders (
+        id SERIAL PRIMARY KEY,
+        voucher_id INTEGER REFERENCES fee_vouchers(id),
+        student_id INTEGER REFERENCES students(id),
+        reminder_type VARCHAR(20) NOT NULL, -- sms, email, both
+        sent_date TIMESTAMP NOT NULL,
+        status VARCHAR(20) DEFAULT 'queued', -- queued, sent, failed, delivered
+        message_content TEXT NOT NULL,
+        gateway_response JSONB,
+        retry_count INTEGER DEFAULT 0,
+        next_retry TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // SMS queue table
+    await tenantClient.query(`
+      CREATE TABLE sms_queue (
+        id SERIAL PRIMARY KEY,
+        phone_number VARCHAR(20) NOT NULL,
+        message TEXT NOT NULL,
+        priority VARCHAR(10) DEFAULT 'medium', -- high, medium, low
+        scheduled_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        status VARCHAR(20) DEFAULT 'queued', -- queued, sending, sent, failed
+        retry_count INTEGER DEFAULT 0,
+        max_retries INTEGER DEFAULT 3,
+        error_message TEXT,
+        gateway_response JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Email queue table
+    await tenantClient.query(`
+      CREATE TABLE email_queue (
+        id SERIAL PRIMARY KEY,
+        email_address VARCHAR(255) NOT NULL,
+        subject VARCHAR(500) NOT NULL,
+        message TEXT NOT NULL,
+        html_content TEXT,
+        priority VARCHAR(10) DEFAULT 'medium', -- high, medium, low
+        scheduled_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        status VARCHAR(20) DEFAULT 'queued', -- queued, sending, sent, failed
+        retry_count INTEGER DEFAULT 0,
+        max_retries INTEGER DEFAULT 3,
+        error_message TEXT,
+        gateway_response JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Payment gateways table
+    await tenantClient.query(`
+      CREATE TABLE payment_gateways (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        type VARCHAR(20) NOT NULL, -- razorpay, payu, stripe, paypal
+        api_key VARCHAR(255) NOT NULL,
+        secret_key VARCHAR(255) NOT NULL,
+        webhook_url VARCHAR(500),
+        is_active BOOLEAN DEFAULT FALSE,
+        test_mode BOOLEAN DEFAULT TRUE,
+        currency VARCHAR(10) DEFAULT 'INR',
+        supported_methods JSONB, -- Array of supported methods
+        configuration JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Receipt sequences table for generating unique receipt numbers
+    await tenantClient.query(`
+      CREATE TABLE receipt_sequences (
+        id SERIAL PRIMARY KEY,
+        prefix VARCHAR(10) NOT NULL,
+        current_number INTEGER DEFAULT 1,
+        fiscal_year VARCHAR(10) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(prefix, fiscal_year)
+      )
+    `);
+
     // Add indexes for better performance
     await tenantClient.query(`
-      CREATE INDEX idx_students_tenant_id ON students(tenant_id);
-      CREATE INDEX idx_students_class_id ON students(class_id);
-      CREATE INDEX idx_students_ay_id ON students(ay_id);
-      CREATE INDEX idx_classes_tenant_id ON classes(tenant_id);
+             CREATE INDEX idx_students_tenant_id ON students(tenant_id);
+       CREATE INDEX idx_students_class_id ON students(class_id);
+       CREATE INDEX idx_students_ay_id ON students(ay_id);
+       CREATE INDEX idx_classes_tenant_id ON classes(tenant_id);
+       CREATE INDEX idx_academic_years_tenant_id ON academic_years(tenant_id);
       CREATE INDEX idx_attendance_student_date ON attendance(student_id, date);
       CREATE INDEX idx_attendance_class_date ON attendance(class_id, date);
       CREATE INDEX idx_attendance_mode ON attendance(attendance_mode);
@@ -587,6 +815,19 @@ const createTenantDatabase = async (tenantId, schoolName, databaseName = null) =
       CREATE INDEX idx_qr_codes_class_valid ON qr_codes(class_id, valid_from, valid_until);
       CREATE INDEX idx_sms_alerts_status ON sms_alerts(status);
       CREATE INDEX idx_offline_queue_sync_status ON offline_attendance_queue(sync_status);
+      
+      -- Fee management indexes
+      CREATE INDEX idx_fee_structures_class_ay ON fee_structures(class_id, ay_id);
+      CREATE INDEX idx_fee_vouchers_student_id ON fee_vouchers(student_id);
+      CREATE INDEX idx_fee_vouchers_status ON fee_vouchers(status);
+      CREATE INDEX idx_fee_vouchers_due_date ON fee_vouchers(due_date);
+      CREATE INDEX idx_fee_payments_voucher_id ON fee_payments(voucher_id);
+      CREATE INDEX idx_fee_payments_student_id ON fee_payments(student_id);
+      CREATE INDEX idx_fee_payments_status ON fee_payments(status);
+      CREATE INDEX idx_student_scholarships_student_id ON student_scholarships(student_id);
+      CREATE INDEX idx_fee_reminders_voucher_id ON fee_reminders(voucher_id);
+      CREATE INDEX idx_sms_queue_status_priority ON sms_queue(status, priority);
+      CREATE INDEX idx_email_queue_status_priority ON email_queue(status, priority);
     `);
 
     tenantClient.release();
@@ -902,6 +1143,12 @@ const migrateTenantDatabases = async () => {
       SELECT 1 FROM database_migrations 
       WHERE migration_name = 'add_comprehensive_student_columns_v1'
     `);
+
+    // Check if fee management tables migration has already been applied
+    const feeManagementMigration = await client.query(`
+      SELECT 1 FROM database_migrations 
+      WHERE migration_name = 'add_fee_management_tables_v1'
+    `);
     
     // Get all tenant databases
     const tenantsResult = await client.query(`
@@ -961,58 +1208,126 @@ const migrateTenantDatabases = async () => {
               `, [tenant.tenant_id]);
             }
             
-            // Add indexes for tenant_id columns
-            try {
-              await tenantClient.query(`
-                CREATE INDEX IF NOT EXISTS idx_students_tenant_id ON students(tenant_id);
-                CREATE INDEX IF NOT EXISTS idx_classes_tenant_id ON classes(tenant_id);
-              `);
-            } catch (indexError) {
-              // Indexes might already exist, continue
-            }
+                         // Add indexes for tenant_id columns
+             try {
+               await tenantClient.query(`
+                 CREATE INDEX IF NOT EXISTS idx_students_tenant_id ON students(tenant_id);
+                 CREATE INDEX IF NOT EXISTS idx_classes_tenant_id ON classes(tenant_id);
+                 CREATE INDEX IF NOT EXISTS idx_academic_years_tenant_id ON academic_years(tenant_id);
+               `);
+             } catch (indexError) {
+               // Indexes might already exist, continue
+             }
           }
           
-          // Migration 3: Add ay_id column to students table if needed
-          if (ayIdMigration.rows.length === 0) {
-            // Check if students table has ay_id column
-            const ayIdColumnCheck = await tenantClient.query(`
-              SELECT column_name 
-              FROM information_schema.columns 
-              WHERE table_name = 'students' AND column_name = 'ay_id'
-            `);
-            
-            if (ayIdColumnCheck.rows.length === 0) {
-              // Add the ay_id column that references academic_years table
-              await tenantClient.query(`
-                ALTER TABLE students 
-                ADD COLUMN ay_id INTEGER REFERENCES academic_years(id)
+                                           // Migration 3: Add missing columns to academic_years table if needed
+            if (ayIdMigration.rows.length === 0) {
+              console.log(`Running Migration 3 for ${tenant.database_name}...`);
+              
+              // Check if academic_years table has label column
+              const labelColumnCheck = await tenantClient.query(`
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'academic_years' AND column_name = 'label'
               `);
               
-              // Auto-assign students to active academic year if one exists
-              const activeAY = await tenantClient.query(`
-                SELECT id FROM academic_years 
-                WHERE status = 'active' 
-                LIMIT 1
-              `);
-              
-              if (activeAY.rows.length > 0) {
+              if (labelColumnCheck.rows.length === 0) {
+                console.log(`Adding label column to academic_years table in ${tenant.database_name}`);
+                // Add the label column to academic_years table
                 await tenantClient.query(`
-                  UPDATE students 
-                  SET ay_id = $1 
-                  WHERE ay_id IS NULL
-                `, [activeAY.rows[0].id]);
-              }
-              
-              // Add index for ay_id column
-              try {
-                await tenantClient.query(`
-                  CREATE INDEX IF NOT EXISTS idx_students_ay_id ON students(ay_id);
+                  ALTER TABLE academic_years 
+                  ADD COLUMN label VARCHAR(50)
                 `);
-              } catch (indexError) {
-                // Index might already exist, continue
+                
+                // Update existing records to use year_name as label
+                await tenantClient.query(`
+                  UPDATE academic_years 
+                  SET label = year_name 
+                  WHERE label IS NULL
+                `);
+                
+                // Make label NOT NULL after populating it
+                await tenantClient.query(`
+                  ALTER TABLE academic_years 
+                  ALTER COLUMN label SET NOT NULL
+                `);
+                console.log(`✅ Label column added to academic_years table in ${tenant.database_name}`);
               }
-            }
-          }
+              
+              // Check if academic_years table has tenant_id column
+              const tenantIdColumnCheck = await tenantClient.query(`
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'academic_years' AND column_name = 'tenant_id'
+              `);
+              
+              if (tenantIdColumnCheck.rows.length === 0) {
+                console.log(`Adding tenant_id column to academic_years table in ${tenant.database_name}`);
+                // Add the tenant_id column to academic_years table
+                await tenantClient.query(`
+                  ALTER TABLE academic_years 
+                  ADD COLUMN tenant_id VARCHAR(50)
+                `);
+                
+                // Update existing records to use the current tenant_id
+                await tenantClient.query(`
+                  UPDATE academic_years 
+                  SET tenant_id = $1 
+                  WHERE tenant_id IS NULL OR tenant_id = ''
+                `, [tenant.tenant_id]);
+                
+                // Make tenant_id NOT NULL after populating it
+                await tenantClient.query(`
+                  ALTER TABLE academic_years 
+                  ALTER COLUMN tenant_id SET NOT NULL
+                `);
+                
+                console.log(`✅ Tenant_id column added to academic_years table in ${tenant.database_name}`);
+              }
+             
+             // Check if students table has ay_id column
+             const ayIdColumnCheck = await tenantClient.query(`
+               SELECT column_name 
+               FROM information_schema.columns 
+               WHERE table_name = 'students' AND column_name = 'ay_id'
+             `);
+             
+             if (ayIdColumnCheck.rows.length === 0) {
+               console.log(`Adding ay_id column to students table in ${tenant.database_name}`);
+               // Add the ay_id column that references academic_years table
+               await tenantClient.query(`
+                 ALTER TABLE students 
+                 ADD COLUMN ay_id INTEGER REFERENCES academic_years(id)
+               `);
+               
+               // Auto-assign students to active academic year if one exists
+               const activeAY = await tenantClient.query(`
+                 SELECT id FROM academic_years 
+                 WHERE status = 'active' 
+                 LIMIT 1
+               `);
+               
+               if (activeAY.rows.length > 0) {
+                 await tenantClient.query(`
+                   UPDATE students 
+                   SET ay_id = $1 
+                   WHERE ay_id IS NULL
+                 `, [activeAY.rows[0].id]);
+               }
+               
+               // Add index for ay_id column
+               try {
+                 await tenantClient.query(`
+                   CREATE INDEX IF NOT EXISTS idx_students_ay_id ON students(ay_id);
+                 `);
+               } catch (indexError) {
+                 // Index might already exist, continue
+               }
+               console.log(`✅ Ay_id column added to students table in ${tenant.database_name}`);
+             }
+             
+             console.log(`Migration 3 completed for ${tenant.database_name}`);
+           }
           
           // Migration 4: Add previous_school column to students table if needed
           if (previousSchoolMigration.rows.length === 0) {
@@ -1065,6 +1380,323 @@ const migrateTenantDatabases = async () => {
               }
             }
           }
+
+          // Migration 6: Add fee management tables if needed
+          if (feeManagementMigration.rows.length === 0) {
+            console.log(`Adding fee management tables to ${tenant.database_name}...`);
+            
+            // Check if fee_structures table exists
+            const feeStructuresCheck = await tenantClient.query(`
+              SELECT 1 FROM information_schema.tables 
+              WHERE table_name = 'fee_structures'
+            `);
+            
+            if (feeStructuresCheck.rows.length === 0) {
+              // Create fee_structures table
+              await tenantClient.query(`
+                CREATE TABLE fee_structures (
+                  id SERIAL PRIMARY KEY,
+                  class_id INTEGER REFERENCES classes(id),
+                  ay_id INTEGER REFERENCES academic_years(id),
+                  tuition_fee DECIMAL(10,2) NOT NULL DEFAULT 0,
+                  library_fee DECIMAL(10,2) DEFAULT 0,
+                  lab_fee DECIMAL(10,2) DEFAULT 0,
+                  sports_fee DECIMAL(10,2) DEFAULT 0,
+                  transport_fee DECIMAL(10,2) DEFAULT 0,
+                  examination_fee DECIMAL(10,2) DEFAULT 0,
+                  development_fee DECIMAL(10,2) DEFAULT 0,
+                  other_fees JSONB,
+                  total_annual_fee DECIMAL(10,2) NOT NULL,
+                  installments INTEGER DEFAULT 1,
+                  installment_amount DECIMAL(10,2) NOT NULL,
+                  due_dates JSONB,
+                  status VARCHAR(20) DEFAULT 'active',
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  UNIQUE(class_id, ay_id)
+                )
+              `);
+              console.log(`Created fee_structures table in ${tenant.database_name}`);
+            }
+
+            // Check if fee_vouchers table exists
+            const feeVouchersCheck = await tenantClient.query(`
+              SELECT 1 FROM information_schema.tables 
+              WHERE table_name = 'fee_vouchers'
+            `);
+            
+            if (feeVouchersCheck.rows.length === 0) {
+              // Create fee_vouchers table
+              await tenantClient.query(`
+                CREATE TABLE fee_vouchers (
+                  id SERIAL PRIMARY KEY,
+                  voucher_number VARCHAR(50) UNIQUE NOT NULL,
+                  student_id INTEGER REFERENCES students(id),
+                  class_id INTEGER REFERENCES classes(id),
+                  ay_id INTEGER REFERENCES academic_years(id),
+                  fee_structure_id INTEGER REFERENCES fee_structures(id),
+                  installment_number INTEGER NOT NULL,
+                  due_date DATE NOT NULL,
+                  amount_due DECIMAL(10,2) NOT NULL,
+                  discount_amount DECIMAL(10,2) DEFAULT 0,
+                  scholarship_amount DECIMAL(10,2) DEFAULT 0,
+                  final_amount DECIMAL(10,2) NOT NULL,
+                  amount_paid DECIMAL(10,2) DEFAULT 0,
+                  balance_amount DECIMAL(10,2) NOT NULL,
+                  status VARCHAR(20) DEFAULT 'pending',
+                  generated_date DATE DEFAULT CURRENT_DATE,
+                  generated_by INTEGER REFERENCES users(id),
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+              `);
+              console.log(`Created fee_vouchers table in ${tenant.database_name}`);
+            }
+
+            // Check if fee_payments table exists
+            const feePaymentsCheck = await tenantClient.query(`
+              SELECT 1 FROM information_schema.tables 
+              WHERE table_name = 'fee_payments'
+            `);
+            
+            if (feePaymentsCheck.rows.length === 0) {
+              // Create fee_payments table
+              await tenantClient.query(`
+                CREATE TABLE fee_payments (
+                  id SERIAL PRIMARY KEY,
+                  voucher_id INTEGER REFERENCES fee_vouchers(id),
+                  student_id INTEGER REFERENCES students(id),
+                  payment_date DATE NOT NULL,
+                  amount_paid DECIMAL(10,2) NOT NULL,
+                  payment_method VARCHAR(20) NOT NULL,
+                  transaction_id VARCHAR(100),
+                  gateway_reference VARCHAR(100),
+                  receipt_number VARCHAR(50) UNIQUE NOT NULL,
+                  notes TEXT,
+                  processed_by INTEGER REFERENCES users(id),
+                  gateway_response JSONB,
+                  status VARCHAR(20) DEFAULT 'completed',
+                  refund_amount DECIMAL(10,2) DEFAULT 0,
+                  refund_date DATE,
+                  refund_reason TEXT,
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+              `);
+              console.log(`Created fee_payments table in ${tenant.database_name}`);
+            }
+
+            // Check if discounts table exists
+            const discountsCheck = await tenantClient.query(`
+              SELECT 1 FROM information_schema.tables 
+              WHERE table_name = 'discounts'
+            `);
+            
+            if (discountsCheck.rows.length === 0) {
+              // Create discounts table
+              await tenantClient.query(`
+                CREATE TABLE discounts (
+                  id SERIAL PRIMARY KEY,
+                  discount_name VARCHAR(100) NOT NULL,
+                  discount_type VARCHAR(20) NOT NULL,
+                  discount_value DECIMAL(10,2) NOT NULL,
+                  applicable_to VARCHAR(20) NOT NULL,
+                  class_ids INTEGER[],
+                  student_ids INTEGER[],
+                  max_amount DECIMAL(10,2),
+                  valid_from DATE NOT NULL,
+                  valid_to DATE NOT NULL,
+                  status VARCHAR(20) DEFAULT 'active',
+                  description TEXT,
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+              `);
+              console.log(`Created discounts table in ${tenant.database_name}`);
+            }
+
+            // Check if scholarships table exists
+            const scholarshipsCheck = await tenantClient.query(`
+              SELECT 1 FROM information_schema.tables 
+              WHERE table_name = 'scholarships'
+            `);
+            
+            if (scholarshipsCheck.rows.length === 0) {
+              // Create scholarships table
+              await tenantClient.query(`
+                CREATE TABLE scholarships (
+                  id SERIAL PRIMARY KEY,
+                  scholarship_name VARCHAR(100) NOT NULL,
+                  scholarship_type VARCHAR(20) NOT NULL,
+                  scholarship_value DECIMAL(10,2) NOT NULL,
+                  applicable_to VARCHAR(20) NOT NULL,
+                  class_ids INTEGER[],
+                  student_ids INTEGER[],
+                  max_amount DECIMAL(10,2),
+                  valid_from DATE NOT NULL,
+                  valid_to DATE NOT NULL,
+                  status VARCHAR(20) DEFAULT 'active',
+                  description TEXT,
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+              `);
+              console.log(`Created scholarships table in ${tenant.database_name}`);
+            }
+
+            // Check if student_scholarships table exists
+            const studentScholarshipsCheck = await tenantClient.query(`
+              SELECT 1 FROM information_schema.tables 
+              WHERE table_name = 'student_scholarships'
+            `);
+            
+            if (studentScholarshipsCheck.rows.length === 0) {
+              // Create student_scholarships table
+              await tenantClient.query(`
+                CREATE TABLE student_scholarships (
+                  id SERIAL PRIMARY KEY,
+                  student_id INTEGER REFERENCES students(id),
+                  scholarship_id INTEGER REFERENCES scholarships(id),
+                  academic_year_id INTEGER REFERENCES academic_years(id),
+                  amount DECIMAL(10,2) NOT NULL,
+                  status VARCHAR(20) DEFAULT 'active',
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+              `);
+              console.log(`Created scholarships table in ${tenant.database_name}`);
+            }
+
+            // Check if fee_reminders table exists
+            const feeRemindersCheck = await tenantClient.query(`
+              SELECT 1 FROM information_schema.tables 
+              WHERE table_name = 'fee_reminders'
+            `);
+            
+            if (feeRemindersCheck.rows.length === 0) {
+              // Create fee_reminders table
+              await tenantClient.query(`
+                CREATE TABLE fee_reminders (
+                  id SERIAL PRIMARY KEY,
+                  voucher_id INTEGER REFERENCES fee_vouchers(id),
+                  student_id INTEGER REFERENCES students(id),
+                  reminder_type VARCHAR(20) NOT NULL,
+                  due_date DATE NOT NULL,
+                  last_sent_at TIMESTAMP,
+                  status VARCHAR(20) DEFAULT 'pending',
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+              `);
+              console.log(`Created fee_reminders table in ${tenant.database_name}`);
+            }
+
+            // Check if sms_queue table exists
+            const smsQueueCheck = await tenantClient.query(`
+              SELECT 1 FROM information_schema.tables 
+              WHERE table_name = 'sms_queue'
+            `);
+            
+            if (smsQueueCheck.rows.length === 0) {
+              // Create sms_queue table
+              await tenantClient.query(`
+                CREATE TABLE sms_queue (
+                  id SERIAL PRIMARY KEY,
+                  phone_number VARCHAR(20) NOT NULL,
+                  message TEXT NOT NULL,
+                  priority INTEGER DEFAULT 5,
+                  status VARCHAR(20) DEFAULT 'pending',
+                  attempts INTEGER DEFAULT 0,
+                  max_attempts INTEGER DEFAULT 3,
+                  next_attempt_at TIMESTAMP,
+                  sent_at TIMESTAMP,
+                  error_message TEXT,
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+              `);
+              console.log(`Created sms_queue table in ${tenant.database_name}`);
+            }
+
+            // Check if email_queue table exists
+            const emailQueueCheck = await tenantClient.query(`
+              SELECT 1 FROM information_schema.tables 
+              WHERE table_name = 'email_queue'
+            `);
+            
+            if (emailQueueCheck.rows.length === 0) {
+              // Create email_queue table
+              await tenantClient.query(`
+                CREATE TABLE email_queue (
+                  id SERIAL PRIMARY KEY,
+                  email VARCHAR(255) NOT NULL,
+                  subject VARCHAR(255) NOT NULL,
+                  message TEXT NOT NULL,
+                  priority INTEGER DEFAULT 5,
+                  status VARCHAR(20) DEFAULT 'pending',
+                  attempts INTEGER DEFAULT 0,
+                  max_attempts INTEGER DEFAULT 3,
+                  next_attempt_at TIMESTAMP,
+                  sent_at TIMESTAMP,
+                  error_message TEXT,
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+              `);
+              console.log(`Created email_queue table in ${tenant.database_name}`);
+            }
+
+            // Check if payment_gateways table exists
+            const paymentGatewaysCheck = await tenantClient.query(`
+              SELECT 1 FROM information_schema.tables 
+              WHERE table_name = 'payment_gateways'
+            `);
+            
+            if (paymentGatewaysCheck.rows.length === 0) {
+              // Create payment_gateways table
+              await tenantClient.query(`
+                CREATE TABLE payment_gateways (
+                  id SERIAL PRIMARY KEY,
+                  gateway_name VARCHAR(100) NOT NULL,
+                  gateway_type VARCHAR(50) NOT NULL,
+                  api_key VARCHAR(255),
+                  secret_key VARCHAR(255),
+                  webhook_url VARCHAR(500),
+                  is_active BOOLEAN DEFAULT TRUE,
+                  config JSONB,
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+              `);
+              console.log(`Created payment_gateways table in ${tenant.database_name}`);
+            }
+
+            // Check if receipt_sequences table exists
+            const receiptSequencesCheck = await tenantClient.query(`
+              SELECT 1 FROM information_schema.tables 
+              WHERE table_name = 'receipt_sequences'
+            `);
+            
+            if (receiptSequencesCheck.rows.length === 0) {
+              // Create receipt_sequences table
+              await tenantClient.query(`
+                CREATE TABLE receipt_sequences (
+                  id SERIAL PRIMARY KEY,
+                  sequence_type VARCHAR(50) NOT NULL,
+                  prefix VARCHAR(10),
+                  current_sequence INTEGER DEFAULT 0,
+                  year INTEGER NOT NULL,
+                  format VARCHAR(50) DEFAULT 'REC{year}{sequence}',
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  UNIQUE(sequence_type, year)
+                )
+              `);
+              console.log(`Created receipt_sequences table in ${tenant.database_name}`);
+            }
+
+            console.log(`Fee management tables migration completed for ${tenant.database_name}`);
+          }
           
         } finally {
           tenantClient.release();
@@ -1116,11 +1748,384 @@ const migrateTenantDatabases = async () => {
         ON CONFLICT (migration_name) DO NOTHING
       `);
     }
+
+    if (feeManagementMigration.rows.length === 0) {
+      await client.query(`
+        INSERT INTO database_migrations (migration_name, status)
+        VALUES ('add_fee_management_tables_v1', 'completed')
+        ON CONFLICT (migration_name) DO NOTHING
+      `);
+    }
     
     client.release();
     
   } catch (error) {
     console.error('Error during tenant database migration:', error);
+  }
+};
+
+// Function to manually add fee management tables to a specific tenant
+const addFeeManagementToTenant = async (tenantId) => {
+  try {
+    const client = await mainPool.connect();
+    
+    // Get tenant database info
+    const tenantResult = await client.query(`
+      SELECT tenant_id, database_name FROM tenants WHERE tenant_id = $1 AND status = 'active'
+    `, [tenantId]);
+    
+    if (tenantResult.rows.length === 0) {
+      throw new Error(`Tenant ${tenantId} not found or not active`);
+    }
+    
+    const tenant = tenantResult.rows[0];
+    client.release();
+    
+    // Create tenant-specific pool
+    const tenantPool = createTenantPool(tenant.tenant_id, tenant.database_name);
+    const tenantClient = await tenantPool.connect();
+    
+    try {
+      console.log(`Adding fee management tables to ${tenant.database_name}...`);
+      
+                                         // First, ensure academic_years table has the required columns
+        const labelColumnCheck = await tenantClient.query(`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = 'academic_years' AND column_name = 'label'
+        `);
+        
+        if (labelColumnCheck.rows.length === 0) {
+          console.log(`Adding label column to academic_years table in ${tenant.database_name}`);
+          // Add the label column to academic_years table
+          await tenantClient.query(`
+            ALTER TABLE academic_years 
+            ADD COLUMN label VARCHAR(50)
+          `);
+          
+          // Update existing records to use year_name as label
+          await tenantClient.query(`
+            UPDATE academic_years 
+            SET label = year_name 
+            WHERE label IS NULL
+          `);
+          
+          // Make label NOT NULL after populating it
+          await tenantClient.query(`
+            ALTER TABLE academic_years 
+            ALTER COLUMN label SET NOT NULL
+          `);
+          
+          console.log(`✅ Label column added to academic_years table in ${tenant.database_name}`);
+        }
+        
+        // Check if tenant_id column exists in academic_years
+        const tenantIdColumnCheck = await tenantClient.query(`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = 'academic_years' AND column_name = 'tenant_id'
+        `);
+        
+        if (tenantIdColumnCheck.rows.length === 0) {
+          console.log(`Adding tenant_id column to academic_years table in ${tenant.database_name}`);
+          // Add the tenant_id column to academic_years table
+          await tenantClient.query(`
+            ALTER TABLE academic_years 
+            ADD COLUMN tenant_id VARCHAR(50)
+          `);
+          
+          // Update existing records to use the current tenant_id
+          await tenantClient.query(`
+            UPDATE academic_years 
+            SET tenant_id = $1 
+            WHERE tenant_id IS NULL OR tenant_id = ''
+          `, [tenant.tenant_id]);
+          
+          // Make tenant_id NOT NULL after populating it
+          await tenantClient.query(`
+            ALTER TABLE academic_years 
+            ALTER COLUMN tenant_id SET NOT NULL
+          `);
+          
+          console.log(`✅ Tenant_id column added to academic_years table in ${tenant.database_name}`);
+        }
+      
+      // Create all fee management tables if they don't exist
+      const tablesToCreate = [
+        {
+          name: 'fee_structures',
+          query: `
+            CREATE TABLE fee_structures (
+              id SERIAL PRIMARY KEY,
+              class_id INTEGER REFERENCES classes(id),
+              ay_id INTEGER REFERENCES academic_years(id),
+              tuition_fee DECIMAL(10,2) NOT NULL DEFAULT 0,
+              library_fee DECIMAL(10,2) DEFAULT 0,
+              lab_fee DECIMAL(10,2) DEFAULT 0,
+              sports_fee DECIMAL(10,2) DEFAULT 0,
+              transport_fee DECIMAL(10,2) DEFAULT 0,
+              examination_fee DECIMAL(10,2) DEFAULT 0,
+              development_fee DECIMAL(10,2) DEFAULT 0,
+              other_fees JSONB,
+              total_annual_fee DECIMAL(10,2) NOT NULL,
+              installments INTEGER DEFAULT 1,
+              installment_amount DECIMAL(10,2) NOT NULL,
+              due_dates JSONB,
+              status VARCHAR(20) DEFAULT 'active',
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              UNIQUE(class_id, ay_id)
+            )
+          `
+        },
+        {
+          name: 'fee_vouchers',
+          query: `
+            CREATE TABLE fee_vouchers (
+              id SERIAL PRIMARY KEY,
+              voucher_number VARCHAR(50) UNIQUE NOT NULL,
+              student_id INTEGER REFERENCES students(id),
+              class_id INTEGER REFERENCES classes(id),
+              ay_id INTEGER REFERENCES academic_years(id),
+              fee_structure_id INTEGER REFERENCES fee_structures(id),
+              installment_number INTEGER NOT NULL,
+              due_date DATE NOT NULL,
+              amount_due DECIMAL(10,2) NOT NULL,
+              discount_amount DECIMAL(10,2) DEFAULT 0,
+              scholarship_amount DECIMAL(10,2) DEFAULT 0,
+              final_amount DECIMAL(10,2) NOT NULL,
+              amount_paid DECIMAL(10,2) DEFAULT 0,
+              balance_amount DECIMAL(10,2) NOT NULL,
+              status VARCHAR(20) DEFAULT 'pending',
+              generated_date DATE DEFAULT CURRENT_DATE,
+              generated_by INTEGER REFERENCES users(id),
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+          `
+        },
+        {
+          name: 'fee_payments',
+          query: `
+            CREATE TABLE fee_payments (
+              id SERIAL PRIMARY KEY,
+              voucher_id INTEGER REFERENCES fee_vouchers(id),
+              student_id INTEGER REFERENCES students(id),
+              payment_date DATE NOT NULL,
+              amount_paid DECIMAL(10,2) NOT NULL,
+              payment_method VARCHAR(20) NOT NULL,
+              transaction_id VARCHAR(100),
+              gateway_reference VARCHAR(100),
+              receipt_number VARCHAR(50) UNIQUE NOT NULL,
+              notes TEXT,
+              processed_by INTEGER REFERENCES users(id),
+              gateway_response JSONB,
+              status VARCHAR(20) DEFAULT 'completed',
+              refund_amount DECIMAL(10,2) DEFAULT 0,
+              refund_date DATE,
+              refund_reason TEXT,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+          `
+        },
+        {
+          name: 'discounts',
+          query: `
+            CREATE TABLE discounts (
+              id SERIAL PRIMARY KEY,
+              discount_name VARCHAR(100) NOT NULL,
+              discount_type VARCHAR(20) NOT NULL,
+              discount_value DECIMAL(10,2) NOT NULL,
+              applicable_to VARCHAR(20) NOT NULL,
+              class_ids INTEGER[],
+              student_ids INTEGER[],
+              max_amount DECIMAL(10,2),
+              valid_from DATE NOT NULL,
+              valid_to DATE NOT NULL,
+              status VARCHAR(20) DEFAULT 'active',
+              description TEXT,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+          `
+        },
+        {
+          name: 'scholarships',
+          query: `
+            CREATE TABLE scholarships (
+              id SERIAL PRIMARY KEY,
+              scholarship_name VARCHAR(100) NOT NULL,
+              scholarship_type VARCHAR(20) NOT NULL,
+              scholarship_value DECIMAL(10,2) NOT NULL,
+              applicable_to VARCHAR(20) NOT NULL,
+              class_ids INTEGER[],
+              student_ids INTEGER[],
+              max_amount DECIMAL(10,2),
+              valid_from DATE NOT NULL,
+              valid_to DATE NOT NULL,
+              status VARCHAR(20) DEFAULT 'active',
+              description TEXT,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+          `
+        },
+        {
+          name: 'student_scholarships',
+          query: `
+            CREATE TABLE student_scholarships (
+              id SERIAL PRIMARY KEY,
+              student_id INTEGER REFERENCES students(id),
+              scholarship_id INTEGER REFERENCES scholarships(id),
+              academic_year_id INTEGER REFERENCES academic_years(id),
+              amount DECIMAL(10,2) NOT NULL,
+              status VARCHAR(20) DEFAULT 'active',
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+          `
+        },
+        {
+          name: 'fee_reminders',
+          query: `
+            CREATE TABLE fee_reminders (
+              id SERIAL PRIMARY KEY,
+              voucher_id INTEGER REFERENCES fee_vouchers(id),
+              student_id INTEGER REFERENCES students(id),
+              reminder_type VARCHAR(20) NOT NULL,
+              due_date DATE NOT NULL,
+              last_sent_at TIMESTAMP,
+              status VARCHAR(20) DEFAULT 'pending',
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+          `
+        },
+        {
+          name: 'sms_queue',
+          query: `
+            CREATE TABLE sms_queue (
+              id SERIAL PRIMARY KEY,
+              phone_number VARCHAR(20) NOT NULL,
+              message TEXT NOT NULL,
+              priority VARCHAR(10) DEFAULT 'medium',
+              scheduled_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              status VARCHAR(20) DEFAULT 'queued',
+              retry_count INTEGER DEFAULT 0,
+              max_retries INTEGER DEFAULT 3,
+              error_message TEXT,
+              gateway_response JSONB,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+          `
+        },
+        {
+          name: 'email_queue',
+          query: `
+            CREATE TABLE email_queue (
+              id SERIAL PRIMARY KEY,
+              email_address VARCHAR(255) NOT NULL,
+              subject VARCHAR(500) NOT NULL,
+              message TEXT NOT NULL,
+              html_content TEXT,
+              priority VARCHAR(10) DEFAULT 'medium',
+              scheduled_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              status VARCHAR(20) DEFAULT 'queued',
+              retry_count INTEGER DEFAULT 0,
+              max_retries INTEGER DEFAULT 3,
+              error_message TEXT,
+              gateway_response JSONB,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+          `
+        },
+        {
+          name: 'payment_gateways',
+          query: `
+            CREATE TABLE payment_gateways (
+              id SERIAL PRIMARY KEY,
+              name VARCHAR(100) NOT NULL,
+              type VARCHAR(20) NOT NULL,
+              api_key VARCHAR(255) NOT NULL,
+              secret_key VARCHAR(255) NOT NULL,
+              webhook_url VARCHAR(500),
+              is_active BOOLEAN DEFAULT FALSE,
+              test_mode BOOLEAN DEFAULT TRUE,
+              currency VARCHAR(10) DEFAULT 'INR',
+              supported_methods JSONB,
+              configuration JSONB,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+          `
+        },
+        {
+          name: 'receipt_sequences',
+          query: `
+            CREATE TABLE receipt_sequences (
+              id SERIAL PRIMARY KEY,
+              prefix VARCHAR(10) NOT NULL,
+              current_number INTEGER DEFAULT 1,
+              fiscal_year VARCHAR(10) NOT NULL,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              UNIQUE(prefix, fiscal_year)
+            )
+          `
+        }
+      ];
+      
+      for (const table of tablesToCreate) {
+        const tableCheck = await tenantClient.query(`
+          SELECT 1 FROM information_schema.tables 
+          WHERE table_name = $1
+        `, [table.name]);
+        
+        if (tableCheck.rows.length === 0) {
+          await tenantClient.query(table.query);
+          console.log(`Created ${table.name} table in ${tenant.database_name}`);
+        } else {
+          console.log(`${table.name} table already exists in ${tenant.database_name}`);
+        }
+      }
+      
+             // Create indexes
+       const indexesToCreate = [
+         'CREATE INDEX IF NOT EXISTS idx_fee_structures_class_ay ON fee_structures(class_id, ay_id)',
+         'CREATE INDEX IF NOT EXISTS idx_fee_vouchers_student_id ON fee_vouchers(student_id)',
+         'CREATE INDEX IF NOT EXISTS idx_fee_vouchers_status ON fee_vouchers(status)',
+         'CREATE INDEX IF NOT EXISTS idx_fee_vouchers_due_date ON fee_vouchers(due_date)',
+         'CREATE INDEX IF NOT EXISTS idx_fee_payments_voucher_id ON fee_payments(voucher_id)',
+         'CREATE INDEX IF NOT EXISTS idx_fee_payments_student_id ON fee_payments(student_id)',
+         'CREATE INDEX IF NOT EXISTS idx_fee_payments_status ON fee_payments(status)',
+         'CREATE INDEX IF NOT EXISTS idx_student_scholarships_student_id ON student_scholarships(student_id)',
+         'CREATE INDEX IF NOT EXISTS idx_fee_reminders_voucher_id ON fee_reminders(voucher_id)',
+         'CREATE INDEX IF NOT EXISTS idx_sms_queue_status_priority ON sms_queue(status, priority)',
+         'CREATE INDEX IF NOT EXISTS idx_email_queue_status_priority ON email_queue(status, priority)',
+         'CREATE INDEX IF NOT EXISTS idx_academic_years_tenant_id ON academic_years(tenant_id)'
+       ];
+      
+      for (const indexQuery of indexesToCreate) {
+        try {
+          await tenantClient.query(indexQuery);
+        } catch (indexError) {
+          // Index might already exist, continue
+          console.log(`Index creation skipped (likely already exists): ${indexError.message}`);
+        }
+      }
+      
+      console.log(`Fee management tables added to ${tenant.database_name}`);
+      return { success: true, message: 'Fee management tables added successfully' };
+    } finally {
+      tenantClient.release();
+      tenantPool.end();
+    }
+  } catch (error) {
+    console.error('Error adding fee management to tenant:', error);
+    throw error;
   }
 };
 
@@ -1139,5 +2144,6 @@ module.exports = {
   getTenantByCustomDomain,
   generateVerificationToken,
   migrateTenantDatabases,
-  checkMigrationsNeeded
+  checkMigrationsNeeded,
+  addFeeManagementToTenant
 }; 

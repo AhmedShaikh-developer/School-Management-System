@@ -50,18 +50,19 @@ const StudentForm: React.FC<StudentFormProps> = ({
     if (student) {
       const initialData = {
         ...student,
-        class_id: student.class_id || undefined
+        class_id: student.class_id || null, // Use null for unassigned students
+        ay_id: student.ay_id || null
       };
       setFormData(initialData);
       
-             // Set photo preview if photo_url exists
-       if (student.photo_url) {
-         console.log('Setting photo preview from student data:', student.photo_url);
-         // Ensure the photo URL is properly formatted
-         const photoUrl = student.photo_url.startsWith('http') ? student.photo_url : `http://localhost:5000${student.photo_url}`;
-         console.log('Formatted photo URL:', photoUrl);
-         setPhotoPreview(photoUrl);
-       }
+      // Set photo preview if photo_url exists
+      if (student.photo_url) {
+        console.log('Setting photo preview from student data:', student.photo_url);
+        // Ensure the photo URL is properly formatted
+        const photoUrl = student.photo_url.startsWith('http') ? student.photo_url : `http://localhost:5000${student.photo_url}`;
+        console.log('Formatted photo URL:', photoUrl);
+        setPhotoPreview(photoUrl);
+      }
     } else {
       // For new students, auto-select the first class if only one exists
       if (classes.length === 1) {
@@ -76,6 +77,7 @@ const StudentForm: React.FC<StudentFormProps> = ({
   // Fetch academic years
   const fetchAcademicYears = async () => {
     try {
+      console.log('Fetching academic years...');
       const response = await fetch('http://localhost:5000/api/academic-years', {
         headers: {
           'Authorization': `Bearer ${tenantToken}`,
@@ -83,8 +85,12 @@ const StudentForm: React.FC<StudentFormProps> = ({
         }
       });
 
+      console.log('Academic years response status:', response.status);
+      
       if (response.ok) {
         const data = await response.json();
+        console.log('Academic years response data:', data);
+        
         if (data.success) {
           setAcademicYears(data.data);
           
@@ -92,13 +98,19 @@ const StudentForm: React.FC<StudentFormProps> = ({
           if (!student) {
             const activeAY = data.data.find((ay: any) => ay.status === 'active');
             if (activeAY) {
+              console.log('Auto-selecting active academic year:', activeAY);
               setFormData(prev => ({ ...prev, ay_id: activeAY.id }));
             }
           }
+        } else {
+          console.error('Failed to fetch academic years:', data.error);
         }
+      } else {
+        const errorData = await response.json();
+        console.error('Failed to fetch academic years:', errorData);
       }
     } catch (error) {
-      console.error('Failed to fetch academic years:', error);
+      console.error('Error fetching academic years:', error);
     }
   };
 
@@ -214,6 +226,11 @@ const StudentForm: React.FC<StudentFormProps> = ({
       newErrors.class_id = 'Please select a class or choose "Assign Later"';
     }
 
+    // Academic year validation
+    if (!formData.ay_id) {
+      newErrors.ay_id = 'Academic year is required';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -222,12 +239,12 @@ const StudentForm: React.FC<StudentFormProps> = ({
     const { name, value } = e.target;
     
     if (name === 'class_id') {
-      let parsedValue: number | undefined;
+      let parsedValue: number | null | undefined;
       
       if (value === 'unassigned') {
-        parsedValue = undefined;
+        parsedValue = null; // Set to null for unassigned
       } else if (value === '') {
-        parsedValue = undefined;
+        parsedValue = undefined; // Keep undefined for validation
       } else {
         parsedValue = parseInt(value, 10);
         if (isNaN(parsedValue)) {
@@ -235,6 +252,16 @@ const StudentForm: React.FC<StudentFormProps> = ({
         }
       }
       
+      setFormData(prev => ({ ...prev, [name]: parsedValue }));
+    } else if (name === 'ay_id') {
+      // Handle academic year ID
+      let parsedValue: number | null = null;
+      if (value && value !== '') {
+        parsedValue = parseInt(value, 10);
+        if (isNaN(parsedValue)) {
+          parsedValue = null;
+        }
+      }
       setFormData(prev => ({ ...prev, [name]: parsedValue }));
     } else if (name === 'date_of_birth' || name === 'enrollment_date') {
       // Handle date fields - convert empty strings to null
@@ -297,13 +324,33 @@ const StudentForm: React.FC<StudentFormProps> = ({
       
       if (formData.class_id && formData.class_id !== 'unassigned') {
         processedClassId = typeof formData.class_id === 'number' ? formData.class_id : Number(formData.class_id);
-      } else {
-        // If class_id is 'unassigned' or undefined, keep it as null (unassigned)
+      } else if (formData.class_id === 'unassigned') {
+        processedClassId = null; // Explicitly set to null for unassigned
       }
       
       const submitData = {
         ...formData,
-        class_id: processedClassId
+        class_id: processedClassId,
+        // Ensure all required fields are properly formatted
+        first_name: formData.first_name.trim(),
+        last_name: formData.last_name.trim(),
+        email: formData.email.trim().toLowerCase(),
+        phone: formData.phone?.trim() || null,
+        date_of_birth: formData.date_of_birth || null,
+        gender: formData.gender || null,
+        address: formData.address?.trim() || null,
+        ay_id: formData.ay_id || null,
+        enrollment_date: formData.enrollment_date || new Date().toISOString().split('T')[0],
+        emergency_contact_name: formData.emergency_contact_name?.trim() || null,
+        emergency_contact_phone: formData.emergency_contact_phone?.trim() || null,
+        emergency_contact_relationship: formData.emergency_contact_relationship?.trim() || null,
+        medical_conditions: formData.medical_conditions?.trim() || null,
+        allergies: formData.allergies?.trim() || null,
+        blood_group: formData.blood_group?.trim() || null,
+        nationality: formData.nationality?.trim() || null,
+        religion: formData.religion?.trim() || null,
+        mother_tongue: formData.mother_tongue?.trim() || null,
+        previous_school: formData.previous_school?.trim() || null
       };
 
       // If there's a new photo file, upload it first
@@ -334,8 +381,31 @@ const StudentForm: React.FC<StudentFormProps> = ({
         }
       }
 
+      console.log('Submitting student data:', submitData);
+
+      // Final validation check
+      if (!submitData.first_name || !submitData.last_name || !submitData.email) {
+        toast.error('Please fill in all required fields');
+        setLoading(false);
+        setSubmitted(false);
+        return;
+      }
+
+      if (!submitData.ay_id) {
+        toast.error('Please select an academic year');
+        setLoading(false);
+        setSubmitted(false);
+        return;
+      }
+
       const url = student ? `http://localhost:5000/api/students/${student.id}` : 'http://localhost:5000/api/students';
       const method = student ? 'PUT' : 'POST';
+      
+      console.log('Making request to:', url, 'with method:', method);
+      console.log('Request headers:', {
+        'Authorization': `Bearer ${tenantToken}`,
+        'Content-Type': 'application/json'
+      });
       
       const response = await fetch(url, {
         method,
@@ -346,8 +416,12 @@ const StudentForm: React.FC<StudentFormProps> = ({
         body: JSON.stringify(submitData)
       });
 
+      console.log('Response status:', response.status);
+      console.log('Response headers:', response.headers);
+
       if (response.ok) {
         const result = await response.json();
+        console.log('Success response:', result);
         
         // For new students, mark this email as created in this session
         if (!student) {
@@ -364,6 +438,9 @@ const StudentForm: React.FC<StudentFormProps> = ({
         console.error('🔍 Error response data:');
         console.error('  - Full error response:', error);
         console.error('  - Error message:', error.error);
+        console.error('  - Error details:', error.details);
+        console.error('  - Response status:', response.status);
+        console.error('  - Response status text:', response.statusText);
         toast.error(error.error || 'Failed to save student');
       }
     } catch (error) {
@@ -555,25 +632,24 @@ const StudentForm: React.FC<StudentFormProps> = ({
             
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 xl:gap-6 mt-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Class Assignment *</label>
-                                 <select
-                   name="class_id"
-                   value={formData.class_id === null ? 'unassigned' : (formData.class_id || '')}
-                   onChange={handleInputChange}
-                   className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 ${
-                     errors.class_id ? 'border-red-500' : ''
-                   }`}
-                 >
-                   <option value="">Select class</option>
-                                       {classes.map(cls => {
-                      return (
-                        <option key={cls.id} value={cls.id}>
-                          {cls.class_name} ({cls.grade_level})
-                        </option>
-                      );
-                    })}
-                   <option value="unassigned">📋 Assign Later</option>
-                 </select>
+                <label className="block text-sm font-medium text-gray-700">Class *</label>
+                <select
+                  name="class_id"
+                  value={formData.class_id === null ? 'unassigned' : (formData.class_id || '')}
+                  onChange={handleInputChange}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  required
+                >
+                  <option value="">Select class</option>
+                  {classes.map(cls => {
+                    return (
+                      <option key={cls.id} value={cls.id}>
+                        {cls.class_name} ({cls.grade_level})
+                      </option>
+                    );
+                  })}
+                  <option value="unassigned">📋 Assign Later</option>
+                </select>
                 {errors.class_id && (
                   <p className="mt-1 text-sm text-red-600">{errors.class_id}</p>
                 )}
@@ -598,6 +674,9 @@ const StudentForm: React.FC<StudentFormProps> = ({
                     </option>
                   ))}
                 </select>
+                {errors.ay_id && (
+                  <p className="mt-1 text-sm text-red-600">{errors.ay_id}</p>
+                )}
                 <p className="mt-1 text-xs text-gray-500">
                   Select the academic year for this student.
                 </p>

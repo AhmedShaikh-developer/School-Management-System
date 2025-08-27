@@ -368,6 +368,23 @@ const createStudent = async (req, res) => {
     
     console.log('Creating student with data:', studentData);
     
+    // Validate required fields
+    if (!studentData.first_name || !studentData.last_name || !studentData.email) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: first_name, last_name, and email are required'
+      });
+    }
+    
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(studentData.email)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid email format'
+      });
+    }
+    
     const tenantDbName = await getTenantDatabaseName(tenantId);
     const tenantPool = createTenantPool(tenantId, tenantDbName);
     const client = await tenantPool.connect();
@@ -394,24 +411,33 @@ const createStudent = async (req, res) => {
       
       // Insert student
       const insertValues = [
-        studentId, studentData.first_name, studentData.last_name, studentData.email,
+        tenantId, studentId, studentData.first_name, studentData.last_name, studentData.email,
         studentData.phone || null, cleanDateOfBirth, studentData.gender || null,
         studentData.address || null, studentData.parent_id || null, studentData.class_id || null,
         studentData.ay_id || null, cleanEnrollmentDate, studentData.photo_url || null,
-        studentData.biometric_data || null, 'active'
+        studentData.biometric_data || null, studentData.emergency_contact_name || null,
+        studentData.emergency_contact_phone || null, studentData.emergency_contact_relationship || null,
+        studentData.medical_conditions || null, studentData.allergies || null, studentData.blood_group || null,
+        studentData.nationality || null, studentData.religion || null, studentData.mother_tongue || null,
+        studentData.previous_school || null, 'active'
       ];
       
       console.log('🔍 Insert query values:');
-      console.log('  - class_id value (position 9):', insertValues[9], 'type:', typeof insertValues[9]);
-      console.log('  - ay_id value (position 10):', insertValues[10], 'type:', typeof insertValues[10]);
-      console.log('  - photo_url value (position 12):', insertValues[12], 'type:', typeof insertValues[12]);
+      console.log('  - tenant_id value (position 1):', insertValues[0], 'type:', typeof insertValues[0]);
+      console.log('  - class_id value (position 10):', insertValues[10], 'type:', typeof insertValues[10]);
+      console.log('  - ay_id value (position 11):', insertValues[11], 'type:', typeof insertValues[11]);
+      console.log('  - photo_url value (position 13):', insertValues[13], 'type:', typeof insertValues[13]);
       console.log('  - All values:', insertValues);
+      console.log('  - Total values count:', insertValues.length);
       
       const result = await client.query(`
         INSERT INTO students (
-          student_id, first_name, last_name, email, phone, date_of_birth, 
-          gender, address, parent_id, class_id, ay_id, enrollment_date, photo_url, biometric_data, status
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+          tenant_id, student_id, first_name, last_name, email, phone, date_of_birth, 
+          gender, address, parent_id, class_id, ay_id, enrollment_date, photo_url, biometric_data,
+          emergency_contact_name, emergency_contact_phone, emergency_contact_relationship,
+          medical_conditions, allergies, blood_group, nationality, religion, mother_tongue,
+          previous_school, status
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
         RETURNING *
       `, insertValues);
       
@@ -454,6 +480,39 @@ const updateStudent = async (req, res) => {
     const updateData = req.body;
     
     console.log('Updating student with data:', updateData);
+    
+    // Validate required fields if they are being updated
+    if (updateData.first_name !== undefined && !updateData.first_name?.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'First name cannot be empty'
+      });
+    }
+    
+    if (updateData.last_name !== undefined && !updateData.last_name?.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Last name cannot be empty'
+      });
+    }
+    
+    if (updateData.email !== undefined) {
+      if (!updateData.email?.trim()) {
+        return res.status(400).json({
+          success: false,
+          error: 'Email cannot be empty'
+        });
+      }
+      
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(updateData.email.trim())) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid email format'
+        });
+      }
+    }
     
     const tenantDbName = await getTenantDatabaseName(tenantId);
     const tenantPool = createTenantPool(tenantId, tenantDbName);
@@ -1046,9 +1105,10 @@ const bulkImportStudents = async (req, res) => {
           
           // Debug insert values
           console.log(`🔍 Row ${rowNumber} insert values:`);
+          console.log(`  - tenant_id value: ${tenantId} (type: ${typeof tenantId})`);
           console.log(`  - class_id value: ${classId} (type: ${typeof classId})`);
           console.log(`  - All insert values:`, [
-            studentId, row.first_name, row.last_name, row.email,
+            tenantId, studentId, row.first_name, row.last_name, row.email,
             row.phone || null, row.date_of_birth || null, row.gender || null,
             row.address || null, classId, row.ay_id || null,
             row.enrollment_date || new Date(), row.photo_url || null, row.biometric_data || null, 'active'
@@ -1057,12 +1117,12 @@ const bulkImportStudents = async (req, res) => {
           // Insert student
           const result = await client.query(`
             INSERT INTO students (
-              student_id, first_name, last_name, email, phone, date_of_birth,
+              tenant_id, student_id, first_name, last_name, email, phone, date_of_birth,
               gender, address, class_id, ay_id, enrollment_date, photo_url, biometric_data, status
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
             RETURNING *
           `, [
-            studentId, row.first_name, row.last_name, row.email,
+            tenantId, studentId, row.first_name, row.last_name, row.email,
             row.phone || null, row.date_of_birth || null, row.gender || null,
             row.address || null, classId, row.ay_id || null,
             row.enrollment_date || new Date(), row.photo_url || null, row.biometric_data || null, 'active'

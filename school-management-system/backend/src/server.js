@@ -18,6 +18,7 @@ const tenantRoutes = require('./routes/tenantRoutes');
 const studentRoutes = require('./routes/studentRoutes');
 const classRoutes = require('./routes/classRoutes');
 const academicYearRoutes = require('./routes/academicYearRoutes');
+const feeRoutes = require('./routes/feeRoutes');
 const { authenticateToken } = require('./middleware/auth');
 const { authenticateTenant } = require('./middleware/tenantAuth');
 
@@ -193,6 +194,7 @@ app.use('/api/attendance', authenticateTenant, attendanceRoutes);
 app.use('/api/students', authenticateTenant, studentRoutes);
 app.use('/api/classes', authenticateTenant, classRoutes);
 app.use('/api/academic-years', authenticateTenant, academicYearRoutes);
+app.use('/api/fees', authenticateTenant, feeRoutes);
 
 // Protected super admin routes
 app.use('/api/super-admin', authenticateToken, superAdminRoutes);
