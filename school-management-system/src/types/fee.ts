@@ -260,3 +260,23 @@ export interface ReminderResponse {
   };
   error?: string;
 }
+
+export interface Voucher {
+  id: number;
+  student_id: number;
+  class_id: number;
+  fee_structure_id: number;
+  academic_year_id: number;
+  voucher_number: string;
+  due_date: string;
+  payment_terms: 'full' | 'installment';
+  installment_count: number;
+  total_amount: number;
+  installment_amount: number;
+  notes?: string;
+  status: 'pending' | 'paid' | 'overdue' | 'cancelled';
+  student_name?: string;
+  class_name?: string;
+  created_at: string;
+  updated_at: string;
+}

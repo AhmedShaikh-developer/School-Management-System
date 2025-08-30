@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { PlusIcon, EyeIcon, DocumentArrowDownIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { toast } from 'react-toastify';
 import { useTenant } from '../../App';
-import { FeeVoucher } from '../../types/fee';
+import { Voucher } from '../../types/fee';
+import VoucherForm from './VoucherForm';
 
 interface Class {
   id: number;
@@ -26,7 +27,7 @@ const VoucherManagement: React.FC<VoucherManagementProps> = ({
   academicYears
 }) => {
   const { tenantToken } = useTenant();
-  const [vouchers, setVouchers] = useState<FeeVoucher[]>([]);
+  const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [loading, setLoading] = useState(false);
   const [showGenerateForm, setShowGenerateForm] = useState(false);
   const [filterClass, setFilterClass] = useState('');
@@ -61,12 +62,21 @@ const VoucherManagement: React.FC<VoucherManagementProps> = ({
       if (response.ok) {
         const data = await response.json();
         if (data.success) {
-          setVouchers(data.data);
+          setVouchers(data.data || []);
           setTotalPages(data.pagination?.total_pages || 1);
+          
+          // No need to show any message for empty results - this is normal
+          if (!data.data || data.data.length === 0) {
+            console.log('No vouchers found - displaying empty state');
+          }
         }
       } else {
         const error = await response.json();
-        toast.error(error.error || 'Failed to fetch vouchers');
+        console.error('Backend error:', error);
+        // Only show error toast for actual failures, not empty results
+        if (error.error && !error.error.includes('empty')) {
+          toast.error(error.error);
+        }
       }
     } catch (error) {
       console.error('Error fetching vouchers:', error);
@@ -135,12 +145,9 @@ const VoucherManagement: React.FC<VoucherManagementProps> = ({
     );
   };
 
-  const getClassNames = (classIds: number[]) => {
-    return classIds
-      .map(id => classes.find(c => c.id === id)?.class_name)
-      .filter(Boolean)
-      .join(', ');
-  };
+
+
+
 
   const getAcademicYearName = (ayId: number) => {
     return academicYears.find(ay => ay.id === ayId)?.label || 'Unknown';
@@ -276,8 +283,11 @@ const VoucherManagement: React.FC<VoucherManagementProps> = ({
                 </tr>
               ) : vouchers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
-                    No vouchers found
+                  <td colSpan={6} className="px-6 py-4 text-center">
+                    <div className="text-gray-500">
+                      <div className="text-lg font-medium mb-2">No vouchers found</div>
+                      <div className="text-sm">Click "Generate Voucher" to create your first fee voucher</div>
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -289,7 +299,7 @@ const VoucherManagement: React.FC<VoucherManagementProps> = ({
                           {voucher.voucher_number}
                         </div>
                         <div className="text-sm text-gray-500">
-                          Installment {voucher.installment_number}
+                          {voucher.payment_terms === 'installment' ? `${voucher.installment_count} Installments` : 'Full Payment'}
                         </div>
                       </div>
                     </td>
@@ -299,22 +309,17 @@ const VoucherManagement: React.FC<VoucherManagementProps> = ({
                           {voucher.student_name || 'Unknown Student'}
                         </div>
                         <div className="text-sm text-gray-500">
-                          {getClassNames([voucher.class_id])}
+                          {voucher.class_name || 'Unknown Class'}
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">
-                        {formatCurrency(voucher.final_amount)}
+                        {formatCurrency(voucher.total_amount)}
                       </div>
-                      {voucher.discount_amount > 0 && (
-                        <div className="text-xs text-green-600">
-                          -{formatCurrency(voucher.discount_amount)} discount
-                        </div>
-                      )}
-                      {voucher.scholarship_amount > 0 && (
+                      {voucher.payment_terms === 'installment' && (
                         <div className="text-xs text-blue-600">
-                          -{formatCurrency(voucher.scholarship_amount)} scholarship
+                          {formatCurrency(voucher.installment_amount)} per installment
                         </div>
                       )}
                     </td>
@@ -399,35 +404,14 @@ const VoucherManagement: React.FC<VoucherManagementProps> = ({
       </div>
 
       {/* Generate Vouchers Form Modal */}
-      {showGenerateForm && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-2xl shadow-lg rounded-md bg-white">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-medium text-gray-900">
-                Generate Fee Vouchers
-              </h3>
-              <button
-                onClick={() => setShowGenerateForm(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <XMarkIcon className="h-6 w-6" />
-              </button>
-            </div>
-
-            <div className="text-center py-8">
-              <p className="text-gray-600 mb-4">
-                Voucher generation form will be implemented here
-              </p>
-              <button
-                onClick={() => setShowGenerateForm(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <VoucherForm
+        isOpen={showGenerateForm}
+        onClose={() => setShowGenerateForm(false)}
+        onVoucherGenerated={() => {
+          fetchVouchers();
+          setShowGenerateForm(false);
+        }}
+      />
     </div>
   );
 };

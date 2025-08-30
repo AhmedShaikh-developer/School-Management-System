@@ -11,6 +11,7 @@ const {
   // Vouchers
   generateVouchers,
   getVouchers,
+  createVoucher,
   
   // Payments
   recordPayment,
@@ -90,6 +91,9 @@ router.delete('/structures/:id', deleteFeeStructure);
 
 // GET /api/fees/vouchers - Get vouchers
 router.get('/vouchers', getVouchers);
+
+// POST /api/fees/vouchers - Create individual voucher
+router.post('/vouchers', createVoucher);
 
 // POST /api/fees/vouchers/generate - Generate vouchers
 router.post('/vouchers/generate', generateVouchers);
