@@ -121,7 +121,7 @@ const generateTenantToken = (tenantId, userId) => {
   return jwt.sign(
     { tenantId, userId }, 
     process.env.JWT_SECRET || 'your-secret-key', 
-    { expiresIn: '24h' }
+    { expiresIn: '24h' } // 24 hours for security - refresh tokens handle longer sessions
   );
 };
 

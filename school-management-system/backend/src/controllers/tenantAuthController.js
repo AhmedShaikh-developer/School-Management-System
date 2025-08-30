@@ -46,8 +46,16 @@ const login = async (req, res) => {
         });
       }
 
-      // Generate JWT token
+      // Generate JWT token and refresh token
       const token = generateTenantToken(tenantId, result.user.id);
+      
+      // Generate refresh token with longer expiration
+      const jwt = require('jsonwebtoken');
+      const refreshToken = jwt.sign(
+        { tenantId, userId: result.user.id },
+        process.env.JWT_SECRET || 'your-secret-key',
+        { expiresIn: '90d' } // Refresh token valid for 90 days
+      );
 
       // Return success response
       res.json({
@@ -60,7 +68,8 @@ const login = async (req, res) => {
             school_name: tenant.school_name,
             domain: tenant.domain
           },
-          token: token
+          token: token,
+          refresh_token: refreshToken
         }
       });
 
@@ -348,10 +357,71 @@ const changePassword = async (req, res) => {
   }
 };
 
+// Refresh JWT token
+const refreshToken = async (req, res) => {
+  try {
+    const { refresh_token } = req.body;
+
+    if (!refresh_token) {
+      return res.status(400).json({
+        success: false,
+        message: 'Refresh token is required'
+      });
+    }
+
+    // Verify the refresh token
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.verify(refresh_token, process.env.JWT_SECRET || 'your-secret-key');
+
+    // Check if token is valid and contains required data
+    if (!decoded.tenantId || !decoded.userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid refresh token'
+      });
+    }
+
+    // Generate new access token
+    const { generateTenantToken } = require('../middleware/tenantAuth');
+    const newToken = generateTenantToken(decoded.tenantId, decoded.userId);
+
+    res.json({
+      success: true,
+      message: 'Token refreshed successfully',
+      data: {
+        token: newToken
+      }
+    });
+
+  } catch (error) {
+    console.error('Token refresh error:', error);
+    
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({
+        success: false,
+        message: 'Refresh token has expired. Please login again.'
+      });
+    }
+    
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid refresh token'
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+};
+
 module.exports = {
   login,
   getProfile,
   logout,
   getTenantInfo,
-  changePassword
+  changePassword,
+  refreshToken
 };

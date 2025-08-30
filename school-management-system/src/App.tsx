@@ -30,6 +30,8 @@ interface TenantContextType {
   setTenantInfo: (info: any | null) => void;
   tenantToken: string | null;
   setTenantToken: (token: string | null) => void;
+  tenantRefreshToken: string | null;
+  setTenantRefreshToken: (token: string | null) => void;
   refreshBranding: () => void;
 }
 
@@ -250,7 +252,7 @@ const TenantLoginPage: React.FC = () => {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const { setTenantId, setIsAuthenticated, setTenantUser, setTenantInfo, setTenantToken } = useTenant();
+  const { setTenantId, setIsAuthenticated, setTenantUser, setTenantInfo, setTenantToken, setTenantRefreshToken } = useTenant();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -275,10 +277,12 @@ const TenantLoginPage: React.FC = () => {
         setTenantUser(data.data.user);
         setTenantInfo(data.data.tenant);
         setTenantToken(data.data.token);
+        setTenantRefreshToken(data.data.refresh_token);
         setIsAuthenticated(true);
         
         // Store in localStorage for persistence
         localStorage.setItem('tenantToken', data.data.token);
+        localStorage.setItem('tenantRefreshToken', data.data.refresh_token);
         localStorage.setItem('tenantId', data.data.tenant.tenant_id);
         localStorage.setItem('tenantUser', JSON.stringify(data.data.user));
         localStorage.setItem('tenantInfo', JSON.stringify(data.data.tenant));
@@ -882,7 +886,7 @@ const SuperAdminLoginPage: React.FC = () => {
 
 // Tenant Dashboard Component
 const TenantDashboard: React.FC = () => {
-  const { tenantInfo, tenantUser, setIsAuthenticated, setTenantId, setTenantUser, setTenantInfo, setTenantToken, tenantId } = useTenant();
+  const { tenantInfo, tenantUser, setIsAuthenticated, setTenantId, setTenantUser, setTenantInfo, setTenantToken, setTenantRefreshToken, tenantId } = useTenant();
   const navigate = useNavigate();
   const [setupStatus, setSetupStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -984,7 +988,9 @@ const TenantDashboard: React.FC = () => {
     setTenantUser(null);
     setTenantInfo(null);
     setTenantToken(null);
+    setTenantRefreshToken(null);
     localStorage.removeItem('tenantToken');
+    localStorage.removeItem('tenantRefreshToken');
     localStorage.removeItem('tenantId');
     localStorage.removeItem('tenantUser');
     localStorage.removeItem('tenantInfo');
@@ -1502,8 +1508,9 @@ function App() {
   const [tenantUser, setTenantUser] = useState<any>(null);
   const [tenantInfo, setTenantInfo] = useState<any>(null);
   const [tenantToken, setTenantToken] = useState<string | null>(null);
+  const [tenantRefreshToken, setTenantRefreshToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [user, setUser] = useState<any>(null);
   const [token, setToken] = useState<string | null>(null);
 
@@ -1520,12 +1527,14 @@ function App() {
 
     // Check for existing tenant authentication
     const storedTenantToken = localStorage.getItem('tenantToken');
+    const storedTenantRefreshToken = localStorage.getItem('tenantRefreshToken');
     const storedTenantId = localStorage.getItem('tenantId');
     const storedTenantUser = localStorage.getItem('tenantUser');
     const storedTenantInfo = localStorage.getItem('tenantInfo');
     
-    if (storedTenantToken && storedTenantId && storedTenantUser && storedTenantInfo) {
+    if (storedTenantToken && storedTenantRefreshToken && storedTenantId && storedTenantUser && storedTenantInfo) {
       setTenantToken(storedTenantToken);
+      setTenantRefreshToken(storedTenantRefreshToken);
       setTenantId(storedTenantId);
       setTenantUser(JSON.parse(storedTenantUser));
       setTenantInfo(JSON.parse(storedTenantInfo));
@@ -1686,6 +1695,8 @@ function App() {
       setTenantInfo,
       tenantToken,
       setTenantToken,
+      tenantRefreshToken,
+      setTenantRefreshToken,
       refreshBranding
     }}>
       <SuperAdminContext.Provider value={{

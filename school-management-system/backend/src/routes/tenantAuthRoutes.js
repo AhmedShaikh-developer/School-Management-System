@@ -1,10 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const { login, getProfile, logout, getTenantInfo, changePassword } = require('../controllers/tenantAuthController');
+const { login, getProfile, logout, getTenantInfo, changePassword, refreshToken } = require('../controllers/tenantAuthController');
 const { authenticateTenant } = require('../middleware/tenantAuth');
 
 // Public routes
 router.post('/login', login);
+router.post('/refresh-token', refreshToken);
 router.get('/tenant/:tenantId/info', getTenantInfo);
 
 // Protected routes
