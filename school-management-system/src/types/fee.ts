@@ -266,17 +266,21 @@ export interface Voucher {
   student_id: number;
   class_id: number;
   fee_structure_id: number;
-  academic_year_id: number;
+  ay_id: number; // Matches database schema
   voucher_number: string;
   due_date: string;
-  payment_terms: 'full' | 'installment';
-  installment_count: number;
-  total_amount: number;
-  installment_amount: number;
-  notes?: string;
+  installment_number: number;
+  amount_due: number; // Matches database schema
+  discount_amount: number;
+  scholarship_amount: number;
+  final_amount: number; // Matches database schema
+  amount_paid: number;
+  balance_amount: number;
   status: 'pending' | 'paid' | 'overdue' | 'cancelled';
   student_name?: string;
   class_name?: string;
+  generated_date: string;
+  generated_by?: number;
   created_at: string;
   updated_at: string;
 }

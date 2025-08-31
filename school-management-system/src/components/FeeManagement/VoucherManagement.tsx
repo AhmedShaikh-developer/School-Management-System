@@ -4,6 +4,8 @@ import { toast } from 'react-toastify';
 import { useTenant } from '../../App';
 import { Voucher } from '../../types/fee';
 import VoucherForm from './VoucherForm';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 interface Class {
   id: number;
@@ -26,7 +28,7 @@ const VoucherManagement: React.FC<VoucherManagementProps> = ({
   classes,
   academicYears
 }) => {
-  const { tenantToken } = useTenant();
+  const { tenantToken, tenantInfo } = useTenant();
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [loading, setLoading] = useState(false);
   const [showGenerateForm, setShowGenerateForm] = useState(false);
@@ -126,6 +128,137 @@ const VoucherManagement: React.FC<VoucherManagementProps> = ({
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
     }).format(amount);
+  };
+
+  // Handle view details
+  const handleViewDetails = (voucher: Voucher) => {
+    console.log('Viewing voucher details:', voucher);
+    // For now, just show the voucher data in console
+    // You can implement a modal or navigate to a details page later
+    toast.info(`Voucher ${voucher.voucher_number || voucher.id} details: ${voucher.student_name || 'Student'} - $${voucher.final_amount || voucher.amount_due || 'Amount'}`);
+  };
+
+  // Handle download voucher
+  const handleDownloadVoucher = async (voucher: Voucher) => {
+    try {
+      console.log('🔍 Downloading voucher:', voucher);
+      console.log('🔍 Voucher data structure:');
+      console.log('  - All voucher keys:', Object.keys(voucher));
+      console.log('  - ay_id:', voucher.ay_id);
+      console.log('  - final_amount:', voucher.final_amount);
+      console.log('  - amount_due:', voucher.amount_due);
+      console.log('  - student_name:', voucher.student_name);
+      console.log('  - class_name:', voucher.class_name);
+      
+      // Get academic year name from the academicYears array
+      console.log('🔍 Academic years available:', academicYears);
+      console.log('🔍 Voucher ay_id:', voucher.ay_id);
+      const academicYearName = academicYears.find(ay => ay.id === voucher.ay_id)?.label || 'Unknown';
+      console.log('🔍 Academic year lookup:', { voucher_ay_id: voucher.ay_id, found_name: academicYearName });
+      
+      // Get school name from tenant info
+      const schoolName = tenantInfo?.school_name || 'School Management System';
+      console.log('🔍 School name for voucher:', schoolName);
+      
+      // Create professional PDF voucher
+      const doc = new jsPDF();
+      
+      // Set document properties
+      doc.setProperties({
+        title: `Fee Voucher - ${voucher.voucher_number || voucher.id}`,
+        subject: 'School Fee Voucher',
+        author: 'School Management System',
+        creator: 'School Management System'
+      });
+      
+      // Add school header
+      doc.setFontSize(24);
+      doc.setTextColor(44, 62, 80);
+      doc.text(schoolName.toUpperCase(), 105, 20, { align: 'center' });
+      
+      doc.setFontSize(16);
+      doc.setTextColor(52, 73, 94);
+      doc.text('Fee Voucher', 105, 35, { align: 'center' });
+      
+      // Add separator line
+      doc.setDrawColor(52, 73, 94);
+      doc.setLineWidth(0.5);
+      doc.line(20, 40, 190, 40);
+      
+      // Add voucher details
+      doc.setFontSize(12);
+      doc.setTextColor(44, 62, 80);
+      
+      const startY = 55;
+      const lineHeight = 8;
+      
+      // Left column
+      doc.text('Voucher Number:', 20, startY);
+      doc.text('Student Name:', 20, startY + lineHeight);
+      doc.text('Class:', 20, startY + lineHeight * 2);
+      doc.text('Academic Year:', 20, startY + lineHeight * 3);
+      doc.text('Due Date:', 20, startY + lineHeight * 4);
+      doc.text('Total Amount:', 20, startY + lineHeight * 5);
+      doc.text('Installment Number:', 20, startY + lineHeight * 6);
+      doc.text('Status:', 20, startY + lineHeight * 7);
+      
+      // Get the correct amount from available fields
+      const voucherAmount = voucher.final_amount || voucher.amount_due || 0;
+      console.log('🔍 Amount calculation:', { final_amount: voucher.final_amount, amount_due: voucher.amount_due, final: voucherAmount });
+      
+      // Right column (values)
+      doc.setFontSize(12);
+      doc.setTextColor(52, 73, 94);
+      doc.text(`${voucher.voucher_number || voucher.id}`, 120, startY);
+      doc.text(`${voucher.student_name || 'Student'}`, 120, startY + lineHeight);
+      doc.text(`${voucher.class_name || 'Class'}`, 120, startY + lineHeight * 2);
+      doc.text(`${academicYearName}`, 120, startY + lineHeight * 3);
+      doc.text(`${new Date(voucher.due_date).toLocaleDateString()}`, 120, startY + lineHeight * 4);
+      doc.text(`$${voucherAmount}`, 120, startY + lineHeight * 5);
+      doc.text(`${voucher.installment_number || 1}`, 120, startY + lineHeight * 6);
+      doc.text(`${voucher.status || 'Pending'}`, 120, startY + lineHeight * 7);
+      
+      // Add installment information if applicable
+      if (voucher.installment_number > 1) {
+        const installmentY = startY + lineHeight * 9;
+        doc.setFontSize(14);
+        doc.setTextColor(44, 62, 80);
+        doc.text('Installment Details:', 20, installmentY);
+        
+        doc.setFontSize(10);
+        doc.setTextColor(52, 73, 94);
+        doc.text(`• Installment Number: ${voucher.installment_number}`, 20, installmentY + lineHeight);
+        doc.text(`• Amount Due: $${voucher.amount_due || 0}`, 20, installmentY + lineHeight * 2);
+        doc.text(`• Final Amount: $${voucher.final_amount || 0}`, 20, installmentY + lineHeight * 3);
+      }
+      
+      // Add payment instructions
+      const instructionsY = startY + lineHeight * (voucher.installment_number > 1 ? 13 : 9);
+      doc.setFontSize(14);
+      doc.setTextColor(44, 62, 80);
+      doc.text('Payment Instructions:', 20, instructionsY);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(52, 73, 94);
+      doc.text('• Please pay the amount before the due date', 20, instructionsY + lineHeight);
+      doc.text('• Keep this voucher for your records', 20, instructionsY + lineHeight * 2);
+      doc.text('• Contact the school office for any queries', 20, instructionsY + lineHeight * 3);
+      
+      // Add footer
+      const footerY = instructionsY + lineHeight * 5;
+      doc.setFontSize(10);
+      doc.setTextColor(127, 140, 141);
+      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 20, footerY);
+      doc.text('School Management System', 105, footerY, { align: 'center' });
+      
+      // Save the PDF
+      doc.save(`voucher_${voucher.voucher_number || voucher.id}.pdf`);
+      
+      toast.success('Professional PDF voucher downloaded successfully!');
+    } catch (error) {
+      console.error('Error generating PDF voucher:', error);
+      toast.error('Failed to generate PDF voucher');
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -299,7 +432,7 @@ const VoucherManagement: React.FC<VoucherManagementProps> = ({
                           {voucher.voucher_number}
                         </div>
                         <div className="text-sm text-gray-500">
-                          {voucher.payment_terms === 'installment' ? `${voucher.installment_count} Installments` : 'Full Payment'}
+                          {voucher.installment_number > 1 ? `Installment ${voucher.installment_number}` : 'Full Payment'}
                         </div>
                       </div>
                     </td>
@@ -315,11 +448,11 @@ const VoucherManagement: React.FC<VoucherManagementProps> = ({
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">
-                        {formatCurrency(voucher.total_amount)}
+                        {formatCurrency(voucher.final_amount || voucher.amount_due)}
                       </div>
-                      {voucher.payment_terms === 'installment' && (
+                      {voucher.installment_number > 1 && (
                         <div className="text-xs text-blue-600">
-                          {formatCurrency(voucher.installment_amount)} per installment
+                          {formatCurrency(voucher.amount_due)} due
                         </div>
                       )}
                     </td>
@@ -334,16 +467,20 @@ const VoucherManagement: React.FC<VoucherManagementProps> = ({
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex space-x-2">
                         <button
-                          className="text-blue-600 hover:text-blue-900"
+                          onClick={() => handleViewDetails(voucher)}
+                          className="inline-flex items-center px-2 py-1.5 border border-blue-300 text-xs font-medium rounded text-blue-700 bg-blue-50 hover:bg-blue-100 hover:border-blue-400 transition-colors duration-200"
                           title="View Details"
                         >
-                          <EyeIcon className="h-4 w-4" />
+                          <EyeIcon className="h-4 w-4 mr-1" />
+                          View
                         </button>
                         <button
-                          className="text-green-600 hover:text-green-900"
-                          title="Download"
+                          onClick={() => handleDownloadVoucher(voucher)}
+                          className="inline-flex items-center px-2 py-1.5 border border-green-300 text-xs font-medium rounded text-green-700 bg-green-50 hover:bg-green-100 hover:border-green-400 transition-colors duration-200"
+                          title="Download Voucher"
                         >
-                          <DocumentArrowDownIcon className="h-4 w-4" />
+                          <DocumentArrowDownIcon className="h-4 w-4 mr-1" />
+                          Download
                         </button>
                       </div>
                     </td>

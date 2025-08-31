@@ -417,12 +417,12 @@ const deleteFeeStructure = async (req, res) => {
 const generateVouchers = async (req, res) => {
   try {
     const { tenant_id: tenantId } = req.tenant;
-    const { class_ids, ay_id, installment_number, due_date } = req.body;
+    const { class_ids, ay_id, installment_count, due_date } = req.body;
     
-    if (!class_ids || !ay_id || !installment_number || !due_date) {
+    if (!class_ids || !ay_id || !installment_count || !due_date) {
       return res.status(400).json({
         success: false,
-        error: 'Class IDs, Academic Year ID, installment number, and due date are required'
+        error: 'Class IDs, Academic Year ID, installment count, and due date are required'
       });
     }
     
@@ -456,44 +456,63 @@ const generateVouchers = async (req, res) => {
         `, [classId, ay_id]);
         
         for (const student of studentsResult.rows) {
-          // Check if voucher already exists for this student and installment
-          const existingVoucher = await client.query(`
-            SELECT id FROM fee_vouchers 
-            WHERE student_id = $1 AND installment_number = $2 AND ay_id = $3
-          `, [student.id, installment_number, ay_id]);
+          // Calculate total annual fee
+          const totalAnnualFee = feeStructure.total_annual_fee;
           
-          if (existingVoucher.rows.length > 0) {
-            continue; // Skip if voucher already exists
+          // Calculate installment amount
+          const installmentAmount = Math.ceil(totalAnnualFee / installment_count);
+          
+          // Calculate due dates for each installment (monthly intervals)
+          const dueDates = [];
+          const baseDate = new Date(due_date);
+          for (let i = 0; i < installment_count; i++) {
+            const installmentDate = new Date(baseDate);
+            installmentDate.setMonth(baseDate.getMonth() + i);
+            dueDates.push(installmentDate.toISOString().split('T')[0]);
           }
           
-          // Calculate discounts and scholarships
-          const { discountAmount, scholarshipAmount } = await calculateDiscountsAndScholarships(
-            client, student.id, classId, feeStructure.installment_amount
-          );
-          
-          const finalAmount = Math.max(0, feeStructure.installment_amount - discountAmount - scholarshipAmount);
-          
-          // Generate voucher number
-          const voucherNumber = await generateVoucherNumber(client, classId, ay_id);
-          
-          // Create voucher
-          const voucherResult = await client.query(`
-            INSERT INTO fee_vouchers (
-              voucher_number, student_id, class_id, ay_id, fee_structure_id,
-              installment_number, due_date, amount_due, discount_amount,
-              scholarship_amount, final_amount, balance_amount, generated_by
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-            RETURNING *
-          `, [
-            voucherNumber, student.id, classId, ay_id, feeStructure.id,
-            installment_number, due_date, feeStructure.installment_amount,
-            discountAmount, scholarshipAmount, finalAmount, finalAmount, req.user.id
-          ]);
-          
-          generatedVouchers.push({
-            ...voucherResult.rows[0],
-            student_name: `${student.first_name} ${student.last_name}`
-          });
+          // Create vouchers for each installment
+          for (let installmentNum = 1; installmentNum <= installment_count; installmentNum++) {
+            // Check if voucher already exists for this student and installment
+            const existingVoucher = await client.query(`
+              SELECT id FROM fee_vouchers 
+              WHERE student_id = $1 AND installment_number = $2 AND ay_id = $3
+            `, [student.id, installmentNum, ay_id]);
+            
+            if (existingVoucher.rows.length > 0) {
+              continue; // Skip if voucher already exists
+            }
+            
+            // Calculate discounts and scholarships for this installment
+            const { discountAmount, scholarshipAmount } = await calculateDiscountsAndScholarships(
+              client, student.id, classId, installmentAmount
+            );
+            
+            const finalAmount = Math.max(0, installmentAmount - discountAmount - scholarshipAmount);
+            
+            // Generate voucher number
+            const voucherNumber = await generateVoucherNumber(client, classId, ay_id);
+            
+            // Create voucher for this installment
+            const voucherResult = await client.query(`
+              INSERT INTO fee_vouchers (
+                voucher_number, student_id, class_id, ay_id, fee_structure_id,
+                installment_number, due_date, amount_due, discount_amount,
+                scholarship_amount, final_amount, balance_amount, generated_by
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+              RETURNING *
+            `, [
+              voucherNumber, student.id, classId, ay_id, feeStructure.id,
+              installmentNum, dueDates[installmentNum - 1], installmentAmount,
+              discountAmount, scholarshipAmount, finalAmount, finalAmount, req.user.id
+            ]);
+            
+            generatedVouchers.push({
+              ...voucherResult.rows[0],
+              student_name: `${student.first_name} ${student.last_name}`,
+              installment_info: `Installment ${installmentNum} of ${installment_count}`
+            });
+          }
         }
       }
       
@@ -587,9 +606,10 @@ const getVouchers = async (req, res) => {
           v.*,
           s.first_name || ' ' || s.last_name as student_name,
           s.student_id as student_roll_number,
-          c.name as class_name,
+          c.class_name,
           c.grade_level,
-          ay.name as academic_year
+          ay.id as ay_id,
+          ay.label as academic_year_label
         FROM fee_vouchers v
         LEFT JOIN students s ON v.student_id = s.id
         LEFT JOIN classes c ON v.class_id = c.id
@@ -1777,10 +1797,8 @@ const createVoucher = async (req, res) => {
       fee_structure_id,
       ay_id,
       due_date,
-      payment_terms,
       installment_count,
       total_amount,
-      installment_amount,
       notes,
       status
     } = req.body;
@@ -1813,35 +1831,67 @@ const createVoucher = async (req, res) => {
       
       const class_id = studentResult.rows[0].class_id;
 
-      // Generate voucher number
-      const voucherNumberResult = await client.query(
-        'SELECT COALESCE(MAX(CAST(voucher_number AS INTEGER)), 0) + 1 as next_number FROM fee_vouchers'
+      // Get fee structure to calculate installment amount
+      const feeStructureResult = await client.query(
+        'SELECT total_annual_fee FROM fee_structures WHERE id = $1',
+        [fee_structure_id]
       );
-      const voucherNumber = voucherNumberResult.rows[0].next_number.toString();
-
-      // Create voucher
-      const insertQuery = `
-        INSERT INTO fee_vouchers (
-          voucher_number, student_id, class_id, ay_id, fee_structure_id,
-          due_date, installment_number, amount_due, final_amount, balance_amount, status, generated_date
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_DATE)
-        RETURNING *
-      `;
-
-      const insertValues = [
-        voucherNumber, student_id, class_id, ay_id, fee_structure_id,
-        due_date, installment_count, total_amount, total_amount, total_amount, status
-      ];
-
-      const result = await client.query(insertQuery, insertValues);
       
-      // Note: Installment records would be created separately if needed
-      // The current tenant database schema doesn't support the complex installment structure
+      if (feeStructureResult.rows.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Fee structure not found'
+        });
+      }
+      
+      const feeStructure = feeStructureResult.rows[0];
+      const installmentCount = installment_count || 1;
+      const installmentAmount = Math.ceil(feeStructure.total_annual_fee / installmentCount);
+      
+      // Calculate due dates for each installment (monthly intervals)
+      const dueDates = [];
+      const baseDate = new Date(due_date);
+      for (let i = 0; i < installmentCount; i++) {
+        const installmentDate = new Date(baseDate);
+        installmentDate.setMonth(baseDate.getMonth() + i);
+        dueDates.push(installmentDate.toISOString().split('T')[0]);
+      }
+      
+      const createdVouchers = [];
+      
+      // Create vouchers for each installment
+      for (let installmentNum = 1; installmentNum <= installmentCount; installmentNum++) {
+        // Generate voucher number
+        const voucherNumberResult = await client.query(
+          'SELECT COALESCE(MAX(CAST(voucher_number AS INTEGER)), 0) + 1 as next_number FROM fee_vouchers'
+        );
+        const voucherNumber = voucherNumberResult.rows[0].next_number.toString();
+
+        // Create voucher for this installment
+        const insertQuery = `
+          INSERT INTO fee_vouchers (
+            voucher_number, student_id, class_id, ay_id, fee_structure_id,
+            due_date, installment_number, amount_due, final_amount, balance_amount, status, generated_date
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_DATE)
+          RETURNING *
+        `;
+
+        const insertValues = [
+          voucherNumber, student_id, class_id, ay_id, fee_structure_id,
+          dueDates[installmentNum - 1], installmentNum, installmentAmount, installmentAmount, installmentAmount, status || 'pending'
+        ];
+
+        const result = await client.query(insertQuery, insertValues);
+        createdVouchers.push(result.rows[0]);
+      }
 
       res.status(201).json({
         success: true,
-        message: 'Voucher created successfully',
-        data: result.rows[0]
+        message: `${installmentCount} voucher(s) created successfully`,
+        data: createdVouchers,
+        installment_count: installmentCount,
+        installment_amount: installmentAmount,
+        total_amount: feeStructure.total_annual_fee
       });
 
     } finally {
