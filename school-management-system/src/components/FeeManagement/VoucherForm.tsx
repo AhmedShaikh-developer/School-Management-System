@@ -611,10 +611,10 @@ const VoucherForm: React.FC<VoucherFormProps> = ({ isOpen, onClose, onVoucherGen
                       // If academic year is selected, show fee structures for that year
                       // Handle case where fee structure doesn't have academic_year_id set
                       if (!fs.academic_year_id) {
-                        console.log('🔍 Fee structure', fs.id, 'has no academic_year_id - showing it anyway');
+                        //console.log('🔍 Fee structure', fs.id, 'has no academic_year_id - showing it anyway');
                         return true; // Show fee structures without academic year
                       }
-                      console.log('🔍 Filtering fee structure:', fs.id, 'academic_year_id:', fs.academic_year_id, 'selected:', formData.academic_year_id);
+                      //console.log('🔍 Filtering fee structure:', fs.id, 'academic_year_id:', fs.academic_year_id, 'selected:', formData.academic_year_id);
                       return fs.academic_year_id.toString() === formData.academic_year_id;
                     })
                     .map(fs => {
