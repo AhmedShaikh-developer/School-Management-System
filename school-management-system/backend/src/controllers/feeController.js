@@ -551,6 +551,64 @@ const generateVouchers = async (req, res) => {
   }
 };
 
+// Get all installments for a specific student and fee structure
+const getStudentInstallments = async (req, res) => {
+  try {
+    const { tenant_id: tenantId } = req.tenant;
+    const { student_id, fee_structure_id, ay_id } = req.query;
+    
+    if (!student_id || !fee_structure_id || !ay_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'Student ID, fee structure ID, and academic year ID are required'
+      });
+    }
+    
+    const tenantDbName = await getTenantDatabaseName(tenantId);
+    const tenantPool = createTenantPool(tenantId, tenantDbName);
+    const client = await tenantPool.connect();
+    
+    try {
+      const query = `
+        SELECT 
+          v.*,
+          s.first_name || ' ' || s.last_name as student_name,
+          c.class_name,
+          ay.label as academic_year_label
+        FROM fee_vouchers v
+        LEFT JOIN students s ON v.student_id = s.id
+        LEFT JOIN classes c ON v.class_id = c.id
+        LEFT JOIN academic_years ay ON v.ay_id = ay.id
+        WHERE v.student_id = $1 
+        AND v.fee_structure_id = $2 
+        AND v.ay_id = $3
+        ORDER BY v.installment_number ASC
+      `;
+      
+      const result = await client.query(query, [student_id, fee_structure_id, ay_id]);
+      
+      res.json({
+        success: true,
+        data: result.rows || [],
+        total_installments: result.rows.length,
+        total_amount: result.rows.reduce((sum, v) => sum + parseFloat(v.final_amount || 0), 0),
+        paid_amount: result.rows.reduce((sum, v) => sum + parseFloat(v.amount_paid || 0), 0),
+        balance_amount: result.rows.reduce((sum, v) => sum + parseFloat(v.balance_amount || 0), 0)
+      });
+      
+    } finally {
+      client.release();
+      tenantPool.end();
+    }
+  } catch (error) {
+    console.error('Error getting student installments:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get student installments'
+    });
+  }
+};
+
 // Get vouchers
 const getVouchers = async (req, res) => {
   try {
@@ -1810,6 +1868,7 @@ const createVoucher = async (req, res) => {
       ay_id,
       due_date,
       installment_count,
+      custom_installment_dates,
       total_amount,
       notes,
       status
@@ -1860,20 +1919,49 @@ const createVoucher = async (req, res) => {
       const installmentCount = installment_count || 1;
       const installmentAmount = Math.ceil(feeStructure.total_annual_fee / installmentCount);
       
-      // Calculate due dates for each installment (monthly intervals)
+      // Calculate due dates for each installment
       const dueDates = [];
-      const baseDate = new Date(due_date);
-      for (let i = 0; i < installmentCount; i++) {
-        const installmentDate = new Date(baseDate);
-        installmentDate.setMonth(baseDate.getMonth() + i);
-        dueDates.push(installmentDate.toISOString().split('T')[0]);
+      
+      if (custom_installment_dates && custom_installment_dates.length === installmentCount) {
+        // Validate custom dates
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        for (const customDate of custom_installment_dates) {
+          if (!customDate) {
+            throw new Error('All custom installment dates must be provided');
+          }
+          
+          const date = new Date(customDate);
+          if (isNaN(date.getTime())) {
+            throw new Error(`Invalid date format: ${customDate}`);
+          }
+          
+          // Ensure dates are not in the past
+          if (date < today) {
+            throw new Error(`Installment date ${customDate} cannot be in the past`);
+          }
+        }
+        
+        // Use custom dates provided by user
+        dueDates.push(...custom_installment_dates);
+        console.log('✅ Using custom installment dates:', dueDates);
+      } else {
+        // Fall back to monthly intervals from base due date
+        const baseDate = new Date(due_date);
+        for (let i = 0; i < installmentCount; i++) {
+          const installmentDate = new Date(baseDate);
+          installmentDate.setMonth(baseDate.getMonth() + i);
+          dueDates.push(installmentDate.toISOString().split('T')[0]);
+        }
+        console.log('⚠️ No custom dates provided, using monthly intervals:', dueDates);
       }
       
       const createdVouchers = [];
       
       // Create vouchers for each installment
       for (let installmentNum = 1; installmentNum <= installmentCount; installmentNum++) {
-        // Generate voucher number
+        // Generate unique voucher number for each installment
         const voucherNumberResult = await client.query(
           'SELECT COALESCE(MAX(CAST(voucher_number AS INTEGER)), 0) + 1 as next_number FROM fee_vouchers'
         );
@@ -1883,7 +1971,7 @@ const createVoucher = async (req, res) => {
         const monthDate = new Date(dueDates[installmentNum - 1]);
         const monthName = monthDate.toLocaleString('en-US', { month: 'long' });
 
-        // Create voucher for this installment
+        // Create individual voucher for this installment
         const insertQuery = `
           INSERT INTO fee_vouchers (
             voucher_number, student_id, class_id, ay_id, fee_structure_id,
@@ -1910,11 +1998,17 @@ const createVoucher = async (req, res) => {
 
       res.status(201).json({
         success: true,
-        message: `${installmentCount} voucher(s) created successfully`,
+        message: `${installmentCount} individual vouchers created successfully - one for each installment`,
         data: createdVouchers,
         installment_count: installmentCount,
         installment_amount: installmentAmount,
-        total_amount: feeStructure.total_annual_fee
+        total_amount: feeStructure.total_annual_fee,
+        voucher_details: createdVouchers.map(v => ({
+          voucher_number: v.voucher_number,
+          installment_number: v.installment_number,
+          due_date: v.due_date,
+          amount: v.amount_due
+        }))
       });
 
     } finally {
@@ -1941,6 +2035,7 @@ module.exports = {
   // Vouchers
   generateVouchers,
   getVouchers,
+  getStudentInstallments,
   createVoucher,
   
   // Payments

@@ -52,6 +52,7 @@ const VoucherForm: React.FC<VoucherFormProps> = ({ isOpen, onClose, onVoucherGen
     due_date: '',
     payment_terms: 'full', // full, installment
     installment_count: 1,
+    custom_installment_dates: [] as string[], // Array to store custom dates for each installment
     notes: ''
   });
 
@@ -79,6 +80,22 @@ const VoucherForm: React.FC<VoucherFormProps> = ({ isOpen, onClose, onVoucherGen
       });
     }
   }, [isOpen, tenantToken, onClose]);
+
+  // Initialize custom installment dates when installment count or due date changes
+  useEffect(() => {
+    if (formData.payment_terms === 'installment' && formData.due_date && formData.installment_count > 1) {
+      const baseDate = new Date(formData.due_date);
+      const newDates: string[] = [];
+      
+      for (let i = 0; i < formData.installment_count; i++) {
+        const installmentDate = new Date(baseDate);
+        installmentDate.setMonth(baseDate.getMonth() + i);
+        newDates.push(installmentDate.toISOString().split('T')[0]);
+      }
+      
+      setFormData(prev => ({ ...prev, custom_installment_dates: newDates }));
+    }
+  }, [formData.payment_terms, formData.due_date, formData.installment_count]);
 
   // Monitor form data changes
   useEffect(() => {
@@ -272,6 +289,40 @@ const VoucherForm: React.FC<VoucherFormProps> = ({ isOpen, onClose, onVoucherGen
       return newFormData;
     });
 
+    // Handle installment count changes
+    if (name === 'installment_count') {
+      const count = parseInt(value) || 1;
+      setFormData(prev => {
+        const newDates: string[] = [];
+        const baseDate = new Date(prev.due_date || new Date());
+        
+        for (let i = 0; i < count; i++) {
+          const installmentDate = new Date(baseDate);
+          installmentDate.setMonth(baseDate.getMonth() + i);
+          newDates.push(installmentDate.toISOString().split('T')[0]);
+        }
+        
+        return { ...prev, custom_installment_dates: newDates };
+      });
+    }
+
+    // Handle due date changes
+    if (name === 'due_date' && formData.payment_terms === 'installment') {
+      const baseDate = new Date(value);
+      setFormData(prev => {
+        const newDates: string[] = [];
+        const count = prev.installment_count || 1;
+        
+        for (let i = 0; i < count; i++) {
+          const installmentDate = new Date(baseDate);
+          installmentDate.setMonth(baseDate.getMonth() + i);
+          newDates.push(installmentDate.toISOString().split('T')[0]);
+        }
+        
+        return { ...prev, custom_installment_dates: newDates };
+      });
+    }
+
     // Handle auto-selection logic
     if (name === 'student_id') {
       const student = students.find(s => s.id.toString() === value);
@@ -328,6 +379,14 @@ const VoucherForm: React.FC<VoucherFormProps> = ({ isOpen, onClose, onVoucherGen
 
       }
     }
+  };
+
+  const handleInstallmentDateChange = (installmentIndex: number, date: string) => {
+    setFormData(prev => {
+      const newDates = [...(prev.custom_installment_dates || [])];
+      newDates[installmentIndex] = date;
+      return { ...prev, custom_installment_dates: newDates };
+    });
   };
 
   const getStudentName = (studentId: string) => {
@@ -405,6 +464,7 @@ const VoucherForm: React.FC<VoucherFormProps> = ({ isOpen, onClose, onVoucherGen
         ay_id: academicYearId,  // ← Changed from academic_year_id to ay_id
         due_date: formData.due_date,
         installment_count: formData.payment_terms === 'installment' ? formData.installment_count : 1,
+        custom_installment_dates: formData.custom_installment_dates.filter(date => date), // Only include valid dates
         total_amount: selectedFeeStructure?.total_annual_fee || 0,
         notes: formData.notes,
         status: 'pending'
@@ -429,7 +489,18 @@ const VoucherForm: React.FC<VoucherFormProps> = ({ isOpen, onClose, onVoucherGen
         const totalAmount = data.total_amount || 0;
         
         if (installmentCount > 1) {
-          toast.success(`${installmentCount} vouchers created successfully! Each installment: $${installmentAmount} (Total: $${totalAmount})`);
+          // Show detailed success message with voucher details
+          const voucherDetails = data.voucher_details || [];
+          let message = `${installmentCount} individual vouchers created successfully!\n\n`;
+          
+          voucherDetails.forEach((voucher: any) => {
+            const dueDate = new Date(voucher.due_date).toLocaleDateString();
+            message += `Voucher ${voucher.voucher_number}: Installment ${voucher.installment_number} - Due: ${dueDate} - $${voucher.amount}\n`;
+          });
+          
+          message += `\nTotal Amount: $${totalAmount}`;
+          
+          toast.success(message, { autoClose: 8000 });
         } else {
           toast.success('Voucher generated successfully!');
         }
@@ -464,6 +535,7 @@ const VoucherForm: React.FC<VoucherFormProps> = ({ isOpen, onClose, onVoucherGen
       due_date: '',
       payment_terms: 'full',
       installment_count: 1,
+      custom_installment_dates: [],
       notes: ''
     });
     setSelectedStudent(null);
@@ -655,6 +727,80 @@ const VoucherForm: React.FC<VoucherFormProps> = ({ isOpen, onClose, onVoucherGen
                   <option value={6}>6 Installments</option>
                   <option value={12}>12 Installments</option>
                 </select>
+                
+                {/* Installment Schedule */}
+                <div className="mt-4 p-3 bg-blue-50 rounded-md">
+                  <h5 className="text-sm font-medium text-blue-900 mb-2">Installment Schedule Preview</h5>
+                  <div className="space-y-2">
+                    {Array.from({ length: formData.installment_count }, (_, index) => {
+                      const installmentNum = index + 1;
+                      const installmentAmount = selectedFeeStructure ? Math.ceil(selectedFeeStructure.total_annual_fee / formData.installment_count) : 0;
+                      
+                      // Use custom date if available, otherwise calculate default
+                      let installmentDate;
+                      if (formData.custom_installment_dates[index]) {
+                        installmentDate = new Date(formData.custom_installment_dates[index]);
+                      } else {
+                        installmentDate = new Date(formData.due_date);
+                        installmentDate.setMonth(installmentDate.getMonth() + index);
+                      }
+                      
+                      return (
+                        <div key={installmentNum} className="flex justify-between items-center text-sm">
+                          <span className="text-blue-700">Installment {installmentNum}:</span>
+                          <div className="text-right">
+                            <div className="font-medium text-blue-900">${installmentAmount}</div>
+                            <div className="text-xs text-blue-600">
+                              Due: {installmentDate.toLocaleDateString()}
+                              {formData.custom_installment_dates[index] && (
+                                <span className="text-green-600 ml-1">(Custom)</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-3 pt-2 border-t border-blue-200">
+                    <div className="flex justify-between items-center text-sm font-medium text-blue-900">
+                      <span>Total:</span>
+                      <span>${selectedFeeStructure?.total_annual_fee || 0}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Advanced Installment Options */}
+                <div className="mt-3">
+                  <details className="group">
+                    <summary className="cursor-pointer text-sm text-blue-600 hover:text-blue-800 font-medium">
+                      ⚙️ Advanced Options (Customize Installment Dates)
+                    </summary>
+                    <div className="mt-2 space-y-2">
+                      {Array.from({ length: formData.installment_count }, (_, index) => {
+                        const installmentNum = index + 1;
+                        const defaultDate = new Date(formData.due_date);
+                        defaultDate.setMonth(defaultDate.getMonth() + index);
+                        
+                        return (
+                          <div key={installmentNum} className="flex items-center space-x-3">
+                            <label className="text-xs text-gray-600 min-w-[80px]">
+                              Installment {installmentNum}:
+                            </label>
+                            <input
+                              type="date"
+                              value={formData.custom_installment_dates[index] || defaultDate.toISOString().split('T')[0]}
+                              onChange={(e) => handleInstallmentDateChange(index, e.target.value)}
+                              className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                          </div>
+                        );
+                      })}
+                      <p className="text-xs text-gray-500 mt-2">
+                        💡 Leave as default for monthly intervals, or customize each installment date
+                      </p>
+                    </div>
+                  </details>
+                </div>
               </div>
             )}
 
