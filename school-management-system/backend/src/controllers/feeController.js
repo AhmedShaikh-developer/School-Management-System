@@ -493,18 +493,29 @@ const generateVouchers = async (req, res) => {
             // Generate voucher number
             const voucherNumber = await generateVoucherNumber(client, classId, ay_id);
             
+            // Get month name from due date
+            const monthDate = new Date(dueDates[installmentNum - 1]);
+            const monthName = monthDate.toLocaleString('en-US', { month: 'long' });
+
             // Create voucher for this installment
             const voucherResult = await client.query(`
               INSERT INTO fee_vouchers (
                 voucher_number, student_id, class_id, ay_id, fee_structure_id,
                 installment_number, due_date, amount_due, discount_amount,
-                scholarship_amount, final_amount, balance_amount, generated_by
+                scholarship_amount, final_amount, balance_amount, generated_by, month
               ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
               RETURNING *
+            // Get admin name for generated_by
+            let adminName = 'Admin';
+            if (req.user?.id) {
+              const adminResult = await client.query('SELECT name FROM users WHERE id = $1', [req.user.id]);
+              adminName = adminResult.rows[0]?.name || 'Admin';
+            }
+            
             `, [
               voucherNumber, student.id, classId, ay_id, feeStructure.id,
               installmentNum, dueDates[installmentNum - 1], installmentAmount,
-              discountAmount, scholarshipAmount, finalAmount, finalAmount, req.user.id
+              discountAmount, scholarshipAmount, finalAmount, finalAmount, adminName, monthName
             ]);
             
             generatedVouchers.push({
@@ -609,7 +620,8 @@ const getVouchers = async (req, res) => {
           c.class_name,
           c.grade_level,
           ay.id as ay_id,
-          ay.label as academic_year_label
+          ay.label as academic_year_label,
+          COALESCE(v.generated_by, 'Admin') as generated_by_name
         FROM fee_vouchers v
         LEFT JOIN students s ON v.student_id = s.id
         LEFT JOIN classes c ON v.class_id = c.id
@@ -1867,18 +1879,29 @@ const createVoucher = async (req, res) => {
         );
         const voucherNumber = voucherNumberResult.rows[0].next_number.toString();
 
+        // Get month name from due date
+        const monthDate = new Date(dueDates[installmentNum - 1]);
+        const monthName = monthDate.toLocaleString('en-US', { month: 'long' });
+
         // Create voucher for this installment
         const insertQuery = `
           INSERT INTO fee_vouchers (
             voucher_number, student_id, class_id, ay_id, fee_structure_id,
-            due_date, installment_number, amount_due, final_amount, balance_amount, status, generated_date
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_DATE)
+            due_date, installment_number, amount_due, final_amount, balance_amount, status, generated_date, generated_by, month
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_DATE, $12, $13)
           RETURNING *
         `;
 
+        // Get admin name for generated_by
+        let adminName = 'Admin';
+        if (req.user?.id) {
+          const adminResult = await client.query('SELECT name FROM users WHERE id = $1', [req.user.id]);
+          adminName = adminResult.rows[0]?.name || 'Admin';
+        }
+        
         const insertValues = [
           voucherNumber, student_id, class_id, ay_id, fee_structure_id,
-          dueDates[installmentNum - 1], installmentNum, installmentAmount, installmentAmount, installmentAmount, status || 'pending'
+          dueDates[installmentNum - 1], installmentNum, installmentAmount, installmentAmount, installmentAmount, status || 'pending', adminName, monthName
         ];
 
         const result = await client.query(insertQuery, insertValues);

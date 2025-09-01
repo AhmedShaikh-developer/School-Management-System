@@ -325,6 +325,7 @@ const VoucherForm: React.FC<VoucherFormProps> = ({ isOpen, onClose, onVoucherGen
         } else if (!feeStructure.academic_year_id) {
           console.log('⚠️ Fee structure has no academic_year_id - keeping current selection');
         }
+
       }
     }
   };
@@ -711,3 +712,4 @@ const VoucherForm: React.FC<VoucherFormProps> = ({ isOpen, onClose, onVoucherGen
 };
 
 export default VoucherForm;
+

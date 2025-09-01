@@ -267,6 +267,7 @@ export interface Voucher {
   class_id: number;
   fee_structure_id: number;
   ay_id: number; // Matches database schema
+  academic_year_label?: string;
   voucher_number: string;
   due_date: string;
   installment_number: number;
@@ -281,6 +282,8 @@ export interface Voucher {
   class_name?: string;
   generated_date: string;
   generated_by?: number;
+  generated_by_name?: string;
+  month?: string;
   created_at: string;
   updated_at: string;
 }
