@@ -712,7 +712,6 @@ const getVouchers = async (req, res) => {
     
     // Check if it's a table doesn't exist error - return empty result instead of error
     if (error.message && error.message.includes('relation "fee_vouchers" does not exist')) {
-      console.log('Fee management tables not set up - returning empty result');
       return res.json({
         success: true,
         data: [],
@@ -727,7 +726,6 @@ const getVouchers = async (req, res) => {
     
     // Check if it's a column doesn't exist error - return empty result instead of error
     if (error.message && error.message.includes('column') && error.message.includes('does not exist')) {
-      console.log('Database schema mismatch - returning empty result');
       return res.json({
         success: true,
         data: [],
@@ -1858,6 +1856,56 @@ const getMonthlyFeeData = async (req, res) => {
   }
 };
 
+// Get school logo for voucher
+const getSchoolLogo = async (req, res) => {
+  try {
+    const { tenant_id: tenantId } = req.tenant;
+    
+    // Get logo from main database tenant_branding table
+    const client = await mainPool.connect();
+    
+    try {
+      const result = await client.query(
+        'SELECT logo_data, logo_filename, logo_mimetype FROM tenant_branding WHERE tenant_id = $1',
+        [tenantId]
+      );
+      
+      if (result.rows.length === 0 || !result.rows[0].logo_data) {
+        return res.status(404).json({
+          success: false,
+          message: 'No logo found for this school'
+        });
+      }
+      
+      const logo = result.rows[0];
+      
+      // Convert bytea to base64 for frontend
+      const logoBase64 = Buffer.from(logo.logo_data).toString('base64');
+      const dataUrl = `data:${logo.logo_mimetype};base64,${logoBase64}`;
+      
+      res.json({
+        success: true,
+        data: {
+          logoData: dataUrl,
+          filename: logo.logo_filename,
+          mimetype: logo.logo_mimetype
+        }
+      });
+      
+    } finally {
+      client.release();
+    }
+    
+  } catch (error) {
+    console.error('Error getting school logo:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching school logo',
+      error: error.message
+    });
+  }
+};
+
 // Create fee voucher
 const createVoucher = async (req, res) => {
   try {
@@ -1945,7 +1993,6 @@ const createVoucher = async (req, res) => {
         
         // Use custom dates provided by user
         dueDates.push(...custom_installment_dates);
-        console.log('✅ Using custom installment dates:', dueDates);
       } else {
         // Fall back to monthly intervals from base due date
         const baseDate = new Date(due_date);
@@ -1954,7 +2001,6 @@ const createVoucher = async (req, res) => {
           installmentDate.setMonth(baseDate.getMonth() + i);
           dueDates.push(installmentDate.toISOString().split('T')[0]);
         }
-        console.log('⚠️ No custom dates provided, using monthly intervals:', dueDates);
       }
       
       const createdVouchers = [];
@@ -2063,5 +2109,8 @@ module.exports = {
   
   // Reports
   getFeeStats,
-  getMonthlyFeeData
+  getMonthlyFeeData,
+  
+  // Logo
+  getSchoolLogo
 };

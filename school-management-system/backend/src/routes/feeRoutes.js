@@ -39,7 +39,10 @@ const {
 
   // Reports
   getFeeStats,
-  getMonthlyFeeData
+  getMonthlyFeeData,
+  
+  // Logo
+  getSchoolLogo
 } = require('../controllers/feeController');
 
 const { addFeeManagementToTenant } = require('../config/database');
@@ -172,5 +175,12 @@ router.get('/reports/stats', getFeeStats);
 
 // GET /api/fees/reports/monthly - Get monthly fee data
 router.get('/reports/monthly', getMonthlyFeeData);
+
+// =======================
+// LOGO ROUTES
+// =======================
+
+// GET /api/fees/logo - Get school logo
+router.get('/logo', getSchoolLogo);
 
 module.exports = router;

@@ -99,17 +99,12 @@ const VoucherForm: React.FC<VoucherFormProps> = ({ isOpen, onClose, onVoucherGen
 
   // Monitor form data changes
   useEffect(() => {
-    console.log('🔍 Form data changed:', formData);
-    console.log('🔍 Current form state:');
-    console.log('  - student_id:', formData.student_id, '✅', !!formData.student_id);
-    console.log('  - fee_structure_id:', formData.fee_structure_id, '✅', !!formData.fee_structure_id);
-    console.log('  - academic_year_id:', formData.academic_year_id, '✅', !!formData.academic_year_id);
-    console.log('  - due_date:', formData.due_date, '✅', !!formData.due_date);
+    // Form data changed
   }, [formData]);
 
   const fetchStudents = async () => {
     try {
-      console.log('🔍 Fetching students with token:', tenantToken ? 'Token exists' : 'No token');
+
       
       const response = await fetch('http://localhost:5000/api/students?limit=1000', {
         headers: {
@@ -118,52 +113,42 @@ const VoucherForm: React.FC<VoucherFormProps> = ({ isOpen, onClose, onVoucherGen
         }
       });
       
-      console.log('📡 Students API response status:', response.status, response.statusText);
+
       
       if (response.ok) {
         const data = await response.json();
-        console.log('✅ Students API response:', data);
-        console.log('🔍 Data structure analysis:');
-        console.log('  - Data type:', typeof data);
-        console.log('  - Data keys:', Object.keys(data));
-        console.log('  - Data.data:', data.data);
-        console.log('  - Data.data type:', typeof data.data);
-        console.log('  - Data.data length:', data.data?.length);
-        console.log('  - Is data.data array?', Array.isArray(data.data));
+
+
         
         if (data.data && data.data.students && Array.isArray(data.data.students)) {
-          console.log('✅ Setting students to data.data.students array');
+
           setStudents(data.data.students);
         } else if (Array.isArray(data.data)) {
-          console.log('✅ Setting students to data.data array');
+
           setStudents(data.data);
         } else if (Array.isArray(data)) {
-          console.log('✅ Setting students to data array directly');
+
           setStudents(data);
         } else if (data.students && Array.isArray(data.students)) {
-          console.log('✅ Setting students to data.students array');
+
           setStudents(data.students);
         } else {
-          console.log('❌ No valid students array found, setting empty array');
-          console.log('  - Available data:', data);
+
           setStudents([]);
         }
       } else {
-        console.error('❌ Failed to fetch students:', response.status, response.statusText);
-        if (response.status === 401) {
-          console.error('🔐 Authentication failed - token may be expired or invalid');
-        }
+        console.error('Failed to fetch students:', response.status, response.statusText);
         setStudents([]);
       }
     } catch (error) {
-      console.error('💥 Error fetching students:', error);
+      console.error('Error fetching students:', error);
       setStudents([]);
     }
   };
 
   const fetchFeeStructures = async () => {
     try {
-      console.log('🔍 Fetching fee structures...');
+
       const response = await fetch('http://localhost:5000/api/fees/structures', {
         headers: {
           'Authorization': `Bearer ${tenantToken}`,
@@ -173,37 +158,31 @@ const VoucherForm: React.FC<VoucherFormProps> = ({ isOpen, onClose, onVoucherGen
       
       if (response.ok) {
         const data = await response.json();
-        console.log('✅ Fee Structures API response:', data);
-        console.log('🔍 Fee Structures data structure:');
-        console.log('  - Data type:', typeof data);
-        console.log('  - Data keys:', Object.keys(data));
-        console.log('  - Data.data:', data.data);
+
         
         if (data.data && data.data.fee_structures && Array.isArray(data.data.fee_structures)) {
-          console.log('✅ Setting fee structures to data.data.fee_structures array');
-          console.log('🔍 Sample fee structure:', data.data.fee_structures[0]);
+
           setFeeStructures(data.data.fee_structures);
         } else if (Array.isArray(data.data)) {
-          console.log('✅ Setting fee structures to data.data array');
-          console.log('🔍 Sample fee structure:', data.data[0]);
+
           setFeeStructures(data.data);
         } else {
-          console.log('❌ No valid fee structures array found');
+
           setFeeStructures([]);
         }
       } else {
-        console.error('❌ Failed to fetch fee structures:', response.status, response.statusText);
+        console.error('Failed to fetch fee structures:', response.status, response.statusText);
         setFeeStructures([]);
       }
     } catch (error) {
-      console.error('💥 Error fetching fee structures:', error);
+      console.error('Error fetching fee structures:', error);
       setFeeStructures([]);
     }
   };
 
   const fetchAcademicYears = async () => {
     try {
-      console.log('🔍 Fetching academic years...');
+
       const response = await fetch('http://localhost:5000/api/academic-years', {
         headers: {
           'Authorization': `Bearer ${tenantToken}`,
@@ -213,35 +192,31 @@ const VoucherForm: React.FC<VoucherFormProps> = ({ isOpen, onClose, onVoucherGen
       
       if (response.ok) {
         const data = await response.json();
-        console.log('✅ Academic Years API response:', data);
-        console.log('🔍 Academic Years data structure:');
-        console.log('  - Data type:', typeof data);
-        console.log('  - Data keys:', Object.keys(data));
-        console.log('  - Data.data:', data.data);
+
         
         if (data.data && data.data.academic_years && Array.isArray(data.data.academic_years)) {
-          console.log('✅ Setting academic years to data.data.academic_years array');
+
           setAcademicYears(data.data.academic_years);
         } else if (Array.isArray(data.data)) {
-          console.log('✅ Setting academic years to data.data array');
+
           setAcademicYears(data.data);
         } else {
-          console.log('❌ No valid academic years array found');
+
           setAcademicYears([]);
         }
       } else {
-        console.error('❌ Failed to fetch academic years:', response.status, response.statusText);
+        console.error('Failed to fetch academic years:', response.status, response.statusText);
         setAcademicYears([]);
       }
     } catch (error) {
-      console.error('💥 Error fetching academic years:', error);
+      console.error('Error fetching academic years:', error);
         setAcademicYears([]);
       }
     };
 
   const fetchClasses = async () => {
     try {
-      console.log('🔍 Fetching classes...');
+
       const response = await fetch('http://localhost:5000/api/classes', {
         headers: {
           'Authorization': `Bearer ${tenantToken}`,
@@ -251,28 +226,24 @@ const VoucherForm: React.FC<VoucherFormProps> = ({ isOpen, onClose, onVoucherGen
       
       if (response.ok) {
         const data = await response.json();
-        console.log('✅ Classes API response:', data);
-        console.log('🔍 Classes data structure:');
-        console.log('  - Data type:', typeof data);
-        console.log('  - Data keys:', Object.keys(data));
-        console.log('  - Data.data:', data.data);
+
         
         if (data.data && data.data.classes && Array.isArray(data.data.classes)) {
-          console.log('✅ Setting classes to data.data.classes array');
+
           setClasses(data.data.classes);
         } else if (Array.isArray(data.data)) {
-          console.log('✅ Setting classes to data.data array');
+
           setClasses(data.data);
         } else {
-          console.log('❌ No valid classes array found');
+
           setClasses([]);
         }
       } else {
-        console.error('❌ Failed to fetch classes:', response.status, response.statusText);
+        console.error('Failed to fetch classes:', response.status, response.statusText);
         setClasses([]);
       }
     } catch (error) {
-      console.error('💥 Error fetching classes:', error);
+      console.error('Error fetching classes:', error);
       setClasses([]);
     }
   };
@@ -280,12 +251,12 @@ const VoucherForm: React.FC<VoucherFormProps> = ({ isOpen, onClose, onVoucherGen
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     
-    console.log('🔍 Input change:', name, '=', value);
+
     
     // Update form data immediately
     setFormData(prev => {
       const newFormData = { ...prev, [name]: value };
-      console.log('🔍 Form data updated:', name, '=', value, 'New formData:', newFormData);
+
       return newFormData;
     });
 
@@ -329,7 +300,6 @@ const VoucherForm: React.FC<VoucherFormProps> = ({ isOpen, onClose, onVoucherGen
       setSelectedStudent(student || null);
       
       if (student) {
-        console.log('🔍 Student selected:', student);
         
         // Find fee structure that matches the student's class
         const feeStructure = feeStructures.find(fs => 
@@ -337,28 +307,26 @@ const VoucherForm: React.FC<VoucherFormProps> = ({ isOpen, onClose, onVoucherGen
         );
         
         if (feeStructure) {
-          console.log('✅ Auto-selecting fee structure:', feeStructure.id);
           setFormData(prev => {
             const updatedFormData = { ...prev, fee_structure_id: feeStructure.id.toString() };
-            console.log('🔍 Updated formData with fee structure:', updatedFormData);
             return updatedFormData;
           });
           setSelectedFeeStructure(feeStructure);
           
           // Only set academic year if fee structure has one and none is currently selected
           if (feeStructure.academic_year_id && !formData.academic_year_id) {
-            console.log('✅ Auto-setting academic year to:', feeStructure.academic_year_id);
+            //console.log('✅ Auto-setting academic year to:', feeStructure.academic_year_id);
             setFormData(prev => {
               const updatedFormData = { ...prev, academic_year_id: feeStructure.academic_year_id.toString() };
-              console.log('🔍 Updated formData with academic year:', updatedFormData);
+              //console.log('🔍 Updated formData with academic year:', updatedFormData);
               return updatedFormData;
             });
           } else if (!feeStructure.academic_year_id && !formData.academic_year_id) {
-            console.log('⚠️ Fee structure has no academic_year_id - user must select academic year manually');
+            //console.log('⚠️ Fee structure has no academic_year_id - user must select academic year manually');
             toast.warning('Please select an Academic Year for this fee structure');
           }
         } else {
-          console.log('❌ No matching fee structure found');
+          //console.log('❌ No matching fee structure found');
         }
       }
     }
@@ -368,13 +336,13 @@ const VoucherForm: React.FC<VoucherFormProps> = ({ isOpen, onClose, onVoucherGen
       setSelectedFeeStructure(feeStructure || null);
       
       if (feeStructure) {
-        console.log('🔍 Fee structure selected:', feeStructure);
+        //console.log('🔍 Fee structure selected:', feeStructure);
         // Only set academic year if fee structure has one and it's different from current
         if (feeStructure.academic_year_id && feeStructure.academic_year_id.toString() !== formData.academic_year_id) {
-          console.log('✅ Setting academic_year_id to:', feeStructure.academic_year_id);
+          //console.log('✅ Setting academic_year_id to:', feeStructure.academic_year_id);
           setFormData(prev => ({ ...prev, academic_year_id: feeStructure.academic_year_id.toString() }));
         } else if (!feeStructure.academic_year_id) {
-          console.log('⚠️ Fee structure has no academic_year_id - keeping current selection');
+          //console.log('⚠️ Fee structure has no academic_year_id - keeping current selection');
         }
 
       }
@@ -418,17 +386,17 @@ const VoucherForm: React.FC<VoucherFormProps> = ({ isOpen, onClose, onVoucherGen
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-          console.log('🔍 Form submission - current formData:', formData);
-      console.log('🔍 Validation check:');
-      console.log('  - student_id:', formData.student_id, '✅', !!formData.student_id);
-      console.log('  - fee_structure_id:', formData.fee_structure_id, '✅', !!formData.fee_structure_id);
-      console.log('  - academic_year_id:', formData.academic_year_id, '✅', !!formData.academic_year_id);
-      console.log('  - due_date:', formData.due_date, '✅', !!formData.due_date);
+      //     console.log('🔍 Form submission - current formData:', formData);
+      // console.log('🔍 Validation check:');
+      // console.log('  - student_id:', formData.student_id, '✅', !!formData.student_id);
+      // console.log('  - fee_structure_id:', formData.fee_structure_id, '✅', !!formData.fee_structure_id);
+      // console.log('  - academic_year_id:', formData.academic_year_id, '✅', !!formData.academic_year_id);
+      // console.log('  - due_date:', formData.due_date, '✅', !!formData.due_date);
       
-      console.log('🔍 Selected objects:');
-      console.log('  - selectedStudent:', selectedStudent);
-      console.log('  - selectedFeeStructure:', selectedFeeStructure);
-      console.log('  - selectedAcademicYear:', academicYears.find(ay => ay.id.toString() === formData.academic_year_id));
+      // console.log('🔍 Selected objects:');
+      // console.log('  - selectedStudent:', selectedStudent);
+      // console.log('  - selectedFeeStructure:', selectedFeeStructure);
+      // console.log('  - selectedAcademicYear:', academicYears.find(ay => ay.id.toString() === formData.academic_year_id));
     
     if (!formData.student_id || !formData.fee_structure_id || !formData.academic_year_id || !formData.due_date) {
       const missingFields = [];
@@ -448,12 +416,12 @@ const VoucherForm: React.FC<VoucherFormProps> = ({ isOpen, onClose, onVoucherGen
       let academicYearId = null;
       if (selectedFeeStructure?.academic_year_id) {
         academicYearId = selectedFeeStructure.academic_year_id;
-        console.log('✅ Using academic_year_id from fee structure:', academicYearId);
+        //console.log('✅ Using academic_year_id from fee structure:', academicYearId);
       } else if (formData.academic_year_id) {
         academicYearId = parseInt(formData.academic_year_id);
-        console.log('✅ Using academic_year_id from form:', academicYearId);
+        //console.log('✅ Using academic_year_id from form:', academicYearId);
       } else {
-        console.log('❌ No academic_year_id available - this should not happen due to validation');
+        //console.log('❌ No academic_year_id available - this should not happen due to validation');
         toast.error('Academic Year is required. Please select an academic year.');
         return;
       }
@@ -470,8 +438,8 @@ const VoucherForm: React.FC<VoucherFormProps> = ({ isOpen, onClose, onVoucherGen
         status: 'pending'
       };
 
-      console.log('🔍 Sending voucher data to backend:', voucherData);
-      console.log('🔍 Selected fee structure:', selectedFeeStructure);
+      // console.log('🔍 Sending voucher data to backend:', voucherData);
+      // console.log('🔍 Selected fee structure:', selectedFeeStructure);
 
              const response = await fetch('http://localhost:5000/api/fees/vouchers', {
          method: 'POST',

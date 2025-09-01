@@ -69,7 +69,7 @@ const VoucherManagement: React.FC<VoucherManagementProps> = ({
           
           // No need to show any message for empty results - this is normal
           if (!data.data || data.data.length === 0) {
-            console.log('No vouchers found - displaying empty state');
+            // No vouchers found - displaying empty state
           }
         }
       } else {
@@ -175,27 +175,33 @@ const VoucherManagement: React.FC<VoucherManagementProps> = ({
   // Handle download voucher
   const handleDownloadVoucher = async (voucher: Voucher) => {
     try {
-      console.log('🔍 Downloading voucher:', voucher);
-      console.log('🔍 Voucher data structure:');
-      console.log('  - All voucher keys:', Object.keys(voucher));
-      console.log('  - ay_id:', voucher.ay_id);
-      console.log('  - final_amount:', voucher.final_amount);
-      console.log('  - amount_due:', voucher.amount_due);
-      console.log('  - student_name:', voucher.student_name);
-      console.log('  - class_name:', voucher.class_name);
-      
-      // Get academic year name from the academicYears array
-      console.log('🔍 Academic years available:', academicYears);
-      console.log('🔍 Voucher ay_id:', voucher.ay_id);
       // Get academic year name - prefer the label from backend if available
       const academicYearName = voucher.academic_year_label || academicYears.find(ay => ay.id === voucher.ay_id)?.label || 'Unknown';
-      console.log('🔍 Academic year lookup:', { voucher_ay_id: voucher.ay_id, backend_label: voucher.academic_year_label, found_name: academicYearName });
       
       // Get school name from tenant info
       const schoolName = tenantInfo?.school_name || 'School Management System';
-      console.log('🔍 School name for voucher:', schoolName);
       
       // No need to fetch all installments - just show the current voucher
+      
+      // Fetch school logo
+      let schoolLogoData = null;
+      try {
+        const logoResponse = await fetch('http://localhost:5000/api/fees/logo', {
+          headers: {
+            'Authorization': `Bearer ${tenantToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (logoResponse.ok) {
+          const logoData = await logoResponse.json();
+          if (logoData.success) {
+            schoolLogoData = logoData.data.logoData;
+          }
+        }
+      } catch (error) {
+        // Could not fetch school logo, proceeding without logo
+      }
       
       // Create professional PDF voucher
       const doc = new jsPDF();
@@ -208,7 +214,16 @@ const VoucherManagement: React.FC<VoucherManagementProps> = ({
         creator: 'School Management System'
       });
       
-      // Add school header
+      // Add school header with logo
+      if (schoolLogoData) {
+        try {
+          // Add logo on the top right (positioned at x=150, y=10, size 30x30)
+          doc.addImage(schoolLogoData, 'PNG', 150, 10, 30, 30);
+        } catch (error) {
+          // Could not add logo to PDF
+        }
+      }
+      
       doc.setFontSize(24);
       doc.setTextColor(44, 62, 80);
       doc.text(schoolName.toUpperCase(), 105, 20, { align: 'center' });
@@ -243,7 +258,6 @@ const VoucherManagement: React.FC<VoucherManagementProps> = ({
       
       // Get the correct amount from available fields
       const voucherAmount = voucher.final_amount || voucher.amount_due || 0;
-      console.log('🔍 Amount calculation:', { final_amount: voucher.final_amount, amount_due: voucher.amount_due, final: voucherAmount });
       
       // Right column (values) - simplified
       doc.setFontSize(12);
@@ -295,7 +309,7 @@ const VoucherManagement: React.FC<VoucherManagementProps> = ({
       // Save the PDF
       doc.save(`voucher_${voucher.voucher_number || voucher.id}.pdf`);
       
-      toast.success('Professional PDF voucher downloaded successfully!');
+      toast.success('Voucher downloaded successfully!');
     } catch (error) {
       console.error('Error generating PDF voucher:', error);
       toast.error('Failed to generate PDF voucher');
