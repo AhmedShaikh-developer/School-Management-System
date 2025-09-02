@@ -1037,6 +1037,7 @@ const createDiscount = async (req, res) => {
       max_amount,
       valid_from,
       valid_to,
+      status = 'active',
       description
     } = req.body;
     
@@ -1055,14 +1056,14 @@ const createDiscount = async (req, res) => {
       const query = `
         INSERT INTO discounts (
           name, type, value, applicable_to, class_ids, student_ids,
-          max_amount, valid_from, valid_to, description
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          max_amount, valid_from, valid_to, status, description
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING *
       `;
       
       const values = [
         name, type, value, applicable_to, class_ids, student_ids,
-        max_amount, valid_from, valid_to, description
+        max_amount, valid_from, valid_to, status, description
       ];
       
       const result = await client.query(query, values);
@@ -1102,6 +1103,7 @@ const updateDiscount = async (req, res) => {
       valid_from,
       valid_to,
       is_active,
+      status,
       description
     } = req.body;
     
@@ -1115,14 +1117,14 @@ const updateDiscount = async (req, res) => {
           name = $1, type = $2, value = $3, applicable_to = $4,
           class_ids = $5, student_ids = $6, max_amount = $7,
           valid_from = $8, valid_to = $9, is_active = $10,
-          description = $11, updated_at = CURRENT_TIMESTAMP
-        WHERE id = $12
+          status = $11, description = $12, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $13
         RETURNING *
       `;
       
       const values = [
         name, type, value, applicable_to, class_ids, student_ids,
-        max_amount, valid_from, valid_to, is_active, description, id
+        max_amount, valid_from, valid_to, is_active, status, description, id
       ];
       
       const result = await client.query(query, values);

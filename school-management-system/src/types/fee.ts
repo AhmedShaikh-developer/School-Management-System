@@ -77,16 +77,23 @@ export interface FeePayment {
 
 export interface Discount {
   id?: number;
-  discount_name: string;
-  discount_type: 'percentage' | 'fixed' | 'conditional';
-  discount_value: number;
+  // Database field names (from backend)
+  name?: string;
+  type?: 'percentage' | 'fixed' | 'conditional';
+  value?: number;
+  // Frontend field names (for compatibility)
+  discount_name?: string;
+  discount_type?: 'percentage' | 'fixed' | 'conditional';
+  discount_value?: number;
+  // Common fields
   applicable_to: 'all' | 'class' | 'student';
   class_ids?: number[];
   student_ids?: number[];
   max_amount?: number;
   valid_from: string;
   valid_to: string;
-  status: 'active' | 'inactive' | 'expired';
+  status?: 'active' | 'inactive' | 'expired';
+  is_active?: boolean; // Alternative to status field
   description?: string;
   created_at?: string;
   updated_at?: string;
