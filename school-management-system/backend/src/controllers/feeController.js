@@ -914,12 +914,15 @@ const getPayments = async (req, res) => {
           s.first_name || ' ' || s.last_name as student_name,
           v.voucher_number,
           v.installment_number,
+          v.month,
           c.class_name,
+          ay.label as academic_year_label,
           u.name as processed_by_name
         FROM fee_payments p
         LEFT JOIN students s ON p.student_id = s.id
         LEFT JOIN fee_vouchers v ON p.voucher_id = v.id
         LEFT JOIN classes c ON v.class_id = c.id
+        LEFT JOIN academic_years ay ON v.ay_id = ay.id
         LEFT JOIN users u ON p.processed_by = u.id
         ${whereClause}
         ORDER BY p.payment_date DESC, p.created_at DESC

@@ -63,6 +63,14 @@ export interface FeePayment {
   processed_by: number;
   gateway_response?: any;
   status: 'pending' | 'completed' | 'failed' | 'refunded';
+  // Additional fields from joined tables
+  student_name?: string;
+  voucher_number?: string;
+  installment_number?: number;
+  month?: string;
+  class_name?: string;
+  academic_year_label?: string;
+  processed_by_name?: string;
   created_at?: string;
   updated_at?: string;
 }
