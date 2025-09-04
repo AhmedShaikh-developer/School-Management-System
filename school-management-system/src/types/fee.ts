@@ -119,8 +119,8 @@ export interface StudentScholarship {
   id?: number;
   student_id: number;
   scholarship_id: number;
-  academic_year_id: number;
-  awarded_date: string;
+  academic_year_id?: number; // Optional since older schema doesn't have this
+  awarded_date?: string; // Optional since older schema might not have this
   amount: number;
   valid_from: string;
   valid_to: string;
@@ -128,6 +128,13 @@ export interface StudentScholarship {
   notes?: string;
   created_at?: string;
   updated_at?: string;
+  // Joined fields from backend
+  first_name?: string;
+  last_name?: string;
+  scholarship_name?: string;
+  scholarship_type?: string;
+  scholarship_value?: number;
+  academic_year_name?: string;
 }
 
 export interface FeeReminder {

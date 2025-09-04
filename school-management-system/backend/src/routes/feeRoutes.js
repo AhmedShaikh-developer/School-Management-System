@@ -31,6 +31,7 @@ const {
   deleteScholarship,
   assignScholarship,
   getStudentScholarships,
+  updateStudentScholarship,
   
   // Reminders
   sendOverdueReminders,
@@ -152,6 +153,9 @@ router.post('/scholarships/assign', assignScholarship);
 
 // GET /api/fees/student-scholarships - Get student scholarships
 router.get('/student-scholarships', getStudentScholarships);
+
+// PUT /api/fees/student-scholarships/:id - Update student scholarship assignment
+router.put('/student-scholarships/:id', updateStudentScholarship);
 
 // =======================
 // REMINDER ROUTES

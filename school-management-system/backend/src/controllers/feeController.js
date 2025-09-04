@@ -1265,9 +1265,9 @@ const createScholarship = async (req, res) => {
   try {
     const { tenant_id: tenantId } = req.tenant;
     const {
-      name,
-      type,
-      value,
+      scholarship_name,
+      scholarship_type,
+      scholarship_value,
       criteria,
       max_students,
       valid_from,
@@ -1275,10 +1275,10 @@ const createScholarship = async (req, res) => {
       description
     } = req.body;
     
-    if (!name || !type || !value || !criteria || !valid_from || !valid_to) {
+    if (!scholarship_name || !scholarship_type || !scholarship_value || !criteria || !valid_from || !valid_to) {
       return res.status(400).json({
         success: false,
-        error: 'Name, type, value, criteria, valid_from, and valid_to are required'
+        error: 'Scholarship name, type, value, criteria, valid_from, and valid_to are required'
       });
     }
     
@@ -1294,7 +1294,7 @@ const createScholarship = async (req, res) => {
         RETURNING *
       `;
       
-      const values = [name, type, value, criteria, max_students, valid_from, valid_to, description];
+      const values = [scholarship_name, scholarship_type, scholarship_value, criteria, max_students, valid_from, valid_to, description];
       
       const result = await client.query(query, values);
       
@@ -1428,14 +1428,14 @@ const updateScholarship = async (req, res) => {
     try {
       const result = await client.query(`
         UPDATE scholarships SET 
-          scholarship_name = $1,
-          scholarship_type = $2,
-          scholarship_value = $3,
+          name = $1,
+          type = $2,
+          value = $3,
           criteria = $4,
           max_students = $5,
           valid_from = $6,
           valid_to = $7,
-          status = $8,
+          is_active = $8,
           description = $9,
           updated_at = CURRENT_TIMESTAMP
         WHERE id = $10
@@ -1448,7 +1448,7 @@ const updateScholarship = async (req, res) => {
         max_students,
         valid_from,
         valid_to,
-        status,
+        status === 'active',
         description,
         id
       ]);
@@ -1536,11 +1536,20 @@ const getStudentScholarships = async (req, res) => {
       );
       const totalRecords = parseInt(countResult.rows[0].count);
 
-      // Get paginated results
+      // Get paginated results with joined data
       const offset = (page - 1) * limit;
       const result = await client.query(`
-        SELECT * FROM student_scholarships 
-        ORDER BY created_at DESC 
+        SELECT 
+          ss.*,
+          s.first_name,
+          s.last_name,
+          sch.name as scholarship_name,
+          sch.type as scholarship_type,
+          sch.value as scholarship_value
+        FROM student_scholarships ss
+        LEFT JOIN students s ON ss.student_id = s.id
+        LEFT JOIN scholarships sch ON ss.scholarship_id = sch.id
+        ORDER BY ss.created_at DESC 
         LIMIT $1 OFFSET $2
       `, [limit, offset]);
 
@@ -1566,6 +1575,74 @@ const getStudentScholarships = async (req, res) => {
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to fetch student scholarships'
+    });
+  }
+};
+
+// Update student scholarship assignment
+const updateStudentScholarship = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { student_id, scholarship_id, amount, valid_from, valid_to, notes } = req.body;
+    const { tenant_id: tenantId } = req.tenant;
+
+    const tenantDbName = await getTenantDatabaseName(tenantId);
+    const tenantPool = createTenantPool(tenantId, tenantDbName);
+    const client = await tenantPool.connect();
+
+    try {
+      // Validate required fields
+      if (!student_id || !scholarship_id || !amount || !valid_from || !valid_to) {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing required fields'
+        });
+      }
+
+      // Check if the student scholarship assignment exists
+      const existingCheck = await client.query(
+        'SELECT * FROM student_scholarships WHERE id = $1',
+        [id]
+      );
+
+      if (existingCheck.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'Student scholarship assignment not found'
+        });
+      }
+
+      // Update the student scholarship assignment
+      const result = await client.query(`
+        UPDATE student_scholarships 
+        SET 
+          student_id = $1,
+          scholarship_id = $2,
+          amount = $3,
+          valid_from = $4,
+          valid_to = $5,
+          notes = $6,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = $7
+        RETURNING *
+      `, [student_id, scholarship_id, amount, valid_from, valid_to, notes, id]);
+
+      res.json({
+        success: true,
+        message: 'Student scholarship assignment updated successfully',
+        data: result.rows[0]
+      });
+
+    } finally {
+      client.release();
+      tenantPool.end();
+    }
+
+  } catch (error) {
+    console.error('Error updating student scholarship:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update student scholarship assignment'
     });
   }
 };
@@ -2106,6 +2183,7 @@ module.exports = {
   assignScholarship,
   deleteScholarship,
   getStudentScholarships,
+  updateStudentScholarship,
   
   // Reminders
   sendOverdueReminders,
