@@ -1539,6 +1539,15 @@ function App() {
       setTenantUser(JSON.parse(storedTenantUser));
       setTenantInfo(JSON.parse(storedTenantInfo));
       setTenantIsAuthenticated(true);
+      
+      // Try to refresh the token automatically on app load
+      setTimeout(async () => {
+        const refreshed = await refreshTenantToken();
+        if (!refreshed) {
+          // If refresh failed, the user will be logged out automatically
+          console.log('Token refresh failed, user will be logged out');
+        }
+      }, 1000); // Wait 1 second after app load
     }
   }, []);
 
@@ -1574,29 +1583,64 @@ function App() {
   const loadTenantBrandingById = async (tenantId: string) => {
     try {
       // Get the tenant token from localStorage
-      const token = localStorage.getItem('tenantToken');
+      let token = localStorage.getItem('tenantToken');
       
       if (!token) {
         // No token available, skip branding load
         return;
       }
       
-      const response = await axios.get(
-        `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/branding/${tenantId}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
+      try {
+        const response = await axios.get(
+          `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/branding/${tenantId}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
           }
+        );
+
+        if (response.data.success) {
+          const branding = response.data.data;
+          const css = generateBrandingCSS(branding);
+          applyBrandingCSS(css, `branding-${tenantId}`);
         }
-      );
-      if (response.data.success) {
-        const branding = response.data.data;
-        const css = generateBrandingCSS(branding);
-        applyBrandingCSS(css, `branding-${tenantId}`);
+      } catch (axiosError: any) {
+        // Check if it's a 403 error (token expired)
+        if (axiosError.response && axiosError.response.status === 403) {
+          console.log('Token expired, attempting to refresh...');
+          const refreshed = await refreshTenantToken();
+          if (refreshed) {
+            // Get the new token and retry
+            token = localStorage.getItem('tenantToken');
+            if (token) {
+              try {
+                const retryResponse = await axios.get(
+                  `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/branding/${tenantId}`,
+                  {
+                    headers: {
+                      'Authorization': `Bearer ${token}`,
+                      'Content-Type': 'application/json'
+                    }
+                  }
+                );
+                if (retryResponse.data.success) {
+                  const branding = retryResponse.data.data;
+                  const css = generateBrandingCSS(branding);
+                  applyBrandingCSS(css, `branding-${tenantId}`);
+                }
+              } catch (retryError) {
+                console.log('Retry failed after token refresh');
+              }
+            }
+          }
+        } else {
+          console.log('Branding API error:', axiosError.message);
+        }
       }
     } catch (error) {
-      // Error loading tenant branding by ID
+      console.log('Error loading tenant branding by ID:', error);
     }
   };
 
@@ -1655,6 +1699,72 @@ function App() {
   const refreshBranding = () => {
     if (tenantId && tenantIsAuthenticated) {
       loadTenantBrandingById(tenantId);
+    }
+  };
+
+  // Function to refresh JWT token
+  const refreshTenantToken = async (): Promise<boolean> => {
+    const refreshToken = localStorage.getItem('tenantRefreshToken');
+    if (!refreshToken) {
+      return false;
+    }
+
+    try {
+      const response = await fetch('http://localhost:5000/api/tenant-auth/refresh-token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.data.token) {
+        // Update tokens
+        setTenantToken(data.data.token);
+        setTenantRefreshToken(data.data.refresh_token);
+        
+        // Update localStorage
+        localStorage.setItem('tenantToken', data.data.token);
+        localStorage.setItem('tenantRefreshToken', data.data.refresh_token);
+        
+        return true;
+      } else {
+        // Refresh failed, logout user
+        setTenantId(null);
+        setTenantUser(null);
+        setTenantInfo(null);
+        setTenantToken(null);
+        setTenantRefreshToken(null);
+        setTenantIsAuthenticated(false);
+        
+        // Clear localStorage
+        localStorage.removeItem('tenantToken');
+        localStorage.removeItem('tenantRefreshToken');
+        localStorage.removeItem('tenantId');
+        localStorage.removeItem('tenantUser');
+        localStorage.removeItem('tenantInfo');
+        
+        return false;
+      }
+    } catch (error) {
+      // Network error, logout user
+      setTenantId(null);
+      setTenantUser(null);
+      setTenantInfo(null);
+      setTenantToken(null);
+      setTenantRefreshToken(null);
+      setTenantIsAuthenticated(false);
+      
+      // Clear localStorage
+      localStorage.removeItem('tenantToken');
+      localStorage.removeItem('tenantRefreshToken');
+      localStorage.removeItem('tenantId');
+      localStorage.removeItem('tenantUser');
+      localStorage.removeItem('tenantInfo');
+      
+      return false;
     }
   };
 
