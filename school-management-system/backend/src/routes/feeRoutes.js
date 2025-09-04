@@ -34,6 +34,8 @@ const {
   updateStudentScholarship,
   
   // Reminders
+  getOverdueReminders,
+  getUpcomingReminders,
   sendOverdueReminders,
   sendUpcomingReminders,
   getReminderHistory,
@@ -160,6 +162,12 @@ router.put('/student-scholarships/:id', updateStudentScholarship);
 // =======================
 // REMINDER ROUTES
 // =======================
+
+// GET /api/fees/reminders/overdue - Get overdue reminders
+router.get('/reminders/overdue', getOverdueReminders);
+
+// GET /api/fees/reminders/upcoming - Get upcoming due reminders
+router.get('/reminders/upcoming', getUpcomingReminders);
 
 // POST /api/fees/reminders/overdue - Send overdue reminders
 router.post('/reminders/overdue', sendOverdueReminders);

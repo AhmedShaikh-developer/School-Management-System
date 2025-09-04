@@ -152,6 +152,12 @@ export interface FeeReminder {
   next_retry?: string;
   created_at?: string;
   updated_at?: string;
+  // Additional fields from backend transformation
+  student_name?: string;
+  student_identifier?: string;
+  class_name?: string;
+  fee_name?: string;
+  total_amount?: number;
 }
 
 export interface PaymentGateway {

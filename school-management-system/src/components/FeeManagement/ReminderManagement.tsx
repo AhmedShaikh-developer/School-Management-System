@@ -292,10 +292,10 @@ const ReminderManagement: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
                         <div className="text-sm font-medium text-gray-900">
-                          Student ID: {reminder.student_id}
+                          {reminder.student_name || `Student ID: ${reminder.student_id}`}
                         </div>
                         <div className="text-sm text-gray-500">
-                          Voucher ID: {reminder.voucher_id}
+                          ID: {reminder.student_id} | Voucher: {reminder.voucher_id}
                         </div>
                       </div>
                     </td>

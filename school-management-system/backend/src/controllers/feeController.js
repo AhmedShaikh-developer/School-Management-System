@@ -1651,6 +1651,559 @@ const updateStudentScholarship = async (req, res) => {
 // REMINDER MANAGEMENT
 // =======================
 
+// Get overdue fee reminders
+const getOverdueReminders = async (req, res) => {
+  try {
+    const { tenant_id: tenantId } = req.tenant;
+    const { page = 1, limit = 10 } = req.query;
+
+    const tenantDbName = await getTenantDatabaseName(tenantId);
+    const tenantPool = createTenantPool(tenantId, tenantDbName);
+    const client = await tenantPool.connect();
+
+    try {
+      // Check if fee_vouchers table exists
+      const tableCheck = await client.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'fee_vouchers'
+        );
+      `);
+
+      if (!tableCheck.rows[0].exists) {
+        return res.json({
+          success: true,
+          data: [],
+          pagination: {
+            current_page: parseInt(page),
+            total_pages: 0,
+            total_records: 0,
+            limit: parseInt(limit)
+          },
+          message: 'Fee vouchers table not found. No reminders available.'
+        });
+      }
+
+      // Check if fee_reminders table exists
+      const remindersTableCheck = await client.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'fee_reminders'
+        );
+      `);
+
+      let reminderData = [];
+
+      if (remindersTableCheck.rows[0].exists) {
+        // Check what columns exist in the fee_reminders table
+        const columnCheck = await client.query(`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = 'fee_reminders' 
+          AND table_schema = 'public'
+        `);
+        
+        const columns = columnCheck.rows.map(row => row.column_name);
+        const hasDueDate = columns.includes('due_date');
+        const hasLastSentAt = columns.includes('last_sent_at');
+        
+        // Get actual reminder records with voucher and student data
+        const offset = (page - 1) * limit;
+        let whereClause = '';
+        let orderClause = '';
+        
+        if (hasDueDate) {
+          whereClause = 'WHERE r.due_date < CURRENT_DATE';
+          orderClause = 'ORDER BY r.due_date ASC';
+        } else {
+          // Fallback: use voucher due_date
+          whereClause = 'WHERE v.due_date < CURRENT_DATE';
+          orderClause = 'ORDER BY v.due_date ASC';
+        }
+        
+        const result = await client.query(`
+          SELECT 
+            r.id,
+            r.voucher_id,
+            r.student_id,
+            r.reminder_type,
+            ${hasDueDate ? 'r.due_date' : 'v.due_date'} as due_date,
+            ${hasLastSentAt ? 'r.last_sent_at' : 'r.sent_date'} as last_sent_at,
+            r.status,
+            r.message_content,
+            s.first_name,
+            s.last_name,
+            s.student_id as student_identifier,
+            c.class_name,
+            CONCAT('Fee Structure #', fs.id) as fee_name,
+            (fs.tuition_fee + fs.library_fee + fs.lab_fee + fs.sports_fee + fs.transport_fee + fs.examination_fee + fs.development_fee) as total_amount
+          FROM fee_reminders r
+          LEFT JOIN fee_vouchers v ON r.voucher_id = v.id
+          LEFT JOIN students s ON r.student_id = s.id
+          LEFT JOIN classes c ON s.class_id = c.id
+          LEFT JOIN fee_structures fs ON v.fee_structure_id = fs.id
+          ${whereClause}
+          ${orderClause}
+          LIMIT $1 OFFSET $2
+        `, [limit, offset]);
+
+        reminderData = result.rows.map(row => ({
+          id: row.id,
+          voucher_id: row.voucher_id,
+          student_id: row.student_id,
+          reminder_type: row.reminder_type,
+          due_date: row.due_date,
+          sent_date: row.due_date,
+          last_sent_at: row.last_sent_at,
+          status: row.status,
+          message_content: row.message_content || `Fee payment reminder for ${row.first_name} ${row.last_name} - Amount: ₹${row.total_amount}`,
+          student_name: `${row.first_name} ${row.last_name}`,
+          student_identifier: row.student_identifier,
+          class_name: row.class_name,
+          fee_name: row.fee_name,
+          total_amount: row.total_amount
+        }));
+      } else {
+        // Fallback: Get overdue vouchers and create reminder data
+        const offset = (page - 1) * limit;
+        const result = await client.query(`
+          SELECT 
+            v.id as voucher_id,
+            v.student_id,
+            v.due_date,
+            s.first_name,
+            s.last_name,
+            s.student_id as student_identifier,
+            c.class_name,
+            CONCAT('Fee Structure #', fs.id) as fee_name,
+            (fs.tuition_fee + fs.library_fee + fs.lab_fee + fs.sports_fee + fs.transport_fee + fs.examination_fee + fs.development_fee) as total_amount,
+            r.last_sent_at,
+            r.sent_date,
+            r.status as reminder_status
+          FROM fee_vouchers v
+          LEFT JOIN students s ON v.student_id = s.id
+          LEFT JOIN classes c ON s.class_id = c.id
+          LEFT JOIN fee_structures fs ON v.fee_structure_id = fs.id
+          LEFT JOIN fee_reminders r ON v.id = r.voucher_id
+          WHERE v.due_date < CURRENT_DATE 
+          AND v.status = 'pending'
+          ORDER BY v.due_date ASC
+          LIMIT $1 OFFSET $2
+        `, [limit, offset]);
+
+        reminderData = result.rows.map(row => ({
+          id: row.voucher_id,
+          voucher_id: row.voucher_id,
+          student_id: row.student_id,
+          reminder_type: 'sms', // Default reminder type
+          due_date: row.due_date,
+          sent_date: row.due_date,
+          last_sent_at: row.last_sent_at || row.sent_date || null, // Use actual sent date if available
+          status: row.reminder_status || 'pending',
+          message_content: `Fee payment reminder for ${row.first_name} ${row.last_name} - Amount: ₹${row.total_amount}`,
+          student_name: `${row.first_name} ${row.last_name}`,
+          student_identifier: row.student_identifier,
+          class_name: row.class_name,
+          fee_name: row.fee_name,
+          total_amount: row.total_amount
+        }));
+      }
+      
+      // If no reminder records found, try to get any pending vouchers as potential reminders
+      if (reminderData.length === 0) {
+        const offset = (page - 1) * limit;
+        const result = await client.query(`
+          SELECT 
+            v.id as voucher_id,
+            v.student_id,
+            v.due_date,
+            s.first_name,
+            s.last_name,
+            s.student_id as student_identifier,
+            c.class_name,
+            CONCAT('Fee Structure #', fs.id) as fee_name,
+            (fs.tuition_fee + fs.library_fee + fs.lab_fee + fs.sports_fee + fs.transport_fee + fs.examination_fee + fs.development_fee) as total_amount,
+            r.last_sent_at,
+            r.sent_date,
+            r.status as reminder_status
+          FROM fee_vouchers v
+          LEFT JOIN students s ON v.student_id = s.id
+          LEFT JOIN classes c ON s.class_id = c.id
+          LEFT JOIN fee_structures fs ON v.fee_structure_id = fs.id
+          LEFT JOIN fee_reminders r ON v.id = r.voucher_id
+          WHERE v.status = 'pending'
+          ORDER BY v.due_date ASC
+          LIMIT $1 OFFSET $2
+        `, [limit, offset]);
+
+        reminderData = result.rows.map(row => ({
+          id: row.voucher_id,
+          voucher_id: row.voucher_id,
+          student_id: row.student_id,
+          reminder_type: 'sms', // Default reminder type
+          due_date: row.due_date,
+          sent_date: row.due_date,
+          last_sent_at: row.last_sent_at || row.sent_date || null, // Use actual sent date if available
+          status: row.reminder_status || 'pending',
+          message_content: `Fee payment reminder for ${row.first_name} ${row.last_name} - Amount: ₹${row.total_amount}`,
+          student_name: `${row.first_name} ${row.last_name}`,
+          student_identifier: row.student_identifier,
+          class_name: row.class_name,
+          fee_name: row.fee_name,
+          total_amount: row.total_amount
+        }));
+      }
+
+      // Get total count
+      let totalRecords = 0;
+      if (remindersTableCheck.rows[0].exists) {
+        // Use the same column logic for count query
+        const columnCheck = await client.query(`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = 'fee_reminders' 
+          AND table_schema = 'public'
+        `);
+        
+        const columns = columnCheck.rows.map(row => row.column_name);
+        const hasDueDate = columns.includes('due_date');
+        
+        let countWhereClause = '';
+        if (hasDueDate) {
+          countWhereClause = 'WHERE r.due_date < CURRENT_DATE';
+        } else {
+          countWhereClause = 'WHERE v.due_date < CURRENT_DATE';
+        }
+        
+        const countResult = await client.query(`
+          SELECT COUNT(*) FROM fee_reminders r
+          LEFT JOIN fee_vouchers v ON r.voucher_id = v.id
+          ${countWhereClause}
+        `);
+        totalRecords = parseInt(countResult.rows[0].count);
+      } else {
+        // First try to count overdue vouchers
+        const overdueCountResult = await client.query(`
+          SELECT COUNT(*) FROM fee_vouchers 
+          WHERE due_date < CURRENT_DATE AND status = 'pending'
+        `);
+        totalRecords = parseInt(overdueCountResult.rows[0].count);
+        
+        // If no overdue vouchers, count all pending vouchers
+        if (totalRecords === 0) {
+          const allPendingCountResult = await client.query(`
+            SELECT COUNT(*) FROM fee_vouchers 
+            WHERE status = 'pending'
+          `);
+          totalRecords = parseInt(allPendingCountResult.rows[0].count);
+        }
+      }
+      const totalPages = Math.ceil(totalRecords / limit);
+
+      res.json({
+        success: true,
+        data: reminderData,
+        pagination: {
+          current_page: parseInt(page),
+          total_pages: totalPages,
+          total_records: totalRecords,
+          limit: parseInt(limit)
+        }
+      });
+
+    } finally {
+      client.release();
+      tenantPool.end();
+    }
+
+  } catch (error) {
+    console.error('Error getting overdue reminders:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to get overdue reminders'
+    });
+  }
+};
+
+// Get upcoming due reminders
+const getUpcomingReminders = async (req, res) => {
+  try {
+    const { tenant_id: tenantId } = req.tenant;
+    const { page = 1, limit = 10, days_ahead = 3 } = req.query;
+
+    const tenantDbName = await getTenantDatabaseName(tenantId);
+    const tenantPool = createTenantPool(tenantId, tenantDbName);
+    const client = await tenantPool.connect();
+
+    try {
+      // Check if fee_vouchers table exists
+      const tableCheck = await client.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'fee_vouchers'
+        );
+      `);
+
+      if (!tableCheck.rows[0].exists) {
+        return res.json({
+          success: true,
+          data: [],
+          pagination: {
+            current_page: parseInt(page),
+            total_pages: 0,
+            total_records: 0,
+            limit: parseInt(limit)
+          },
+          message: 'Fee vouchers table not found. No reminders available.'
+        });
+      }
+
+      // Check if fee_reminders table exists
+      const remindersTableCheck = await client.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'fee_reminders'
+        );
+      `);
+
+      let reminderData = [];
+
+      if (remindersTableCheck.rows[0].exists) {
+        // Check what columns exist in the fee_reminders table
+        const columnCheck = await client.query(`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = 'fee_reminders' 
+          AND table_schema = 'public'
+        `);
+        
+        const columns = columnCheck.rows.map(row => row.column_name);
+        const hasDueDate = columns.includes('due_date');
+        const hasLastSentAt = columns.includes('last_sent_at');
+        
+        // Get actual reminder records with voucher and student data
+        const offset = (page - 1) * limit;
+        let whereClause = '';
+        let orderClause = '';
+        
+        if (hasDueDate) {
+          whereClause = `WHERE r.due_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '${days_ahead} days'`;
+          orderClause = 'ORDER BY r.due_date ASC';
+        } else {
+          // Fallback: use voucher due_date
+          whereClause = `WHERE v.due_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '${days_ahead} days'`;
+          orderClause = 'ORDER BY v.due_date ASC';
+        }
+        
+        const result = await client.query(`
+          SELECT 
+            r.id,
+            r.voucher_id,
+            r.student_id,
+            r.reminder_type,
+            ${hasDueDate ? 'r.due_date' : 'v.due_date'} as due_date,
+            ${hasLastSentAt ? 'r.last_sent_at' : 'r.sent_date'} as last_sent_at,
+            r.status,
+            r.message_content,
+            s.first_name,
+            s.last_name,
+            s.student_id as student_identifier,
+            c.class_name,
+            CONCAT('Fee Structure #', fs.id) as fee_name,
+            (fs.tuition_fee + fs.library_fee + fs.lab_fee + fs.sports_fee + fs.transport_fee + fs.examination_fee + fs.development_fee) as total_amount
+          FROM fee_reminders r
+          LEFT JOIN fee_vouchers v ON r.voucher_id = v.id
+          LEFT JOIN students s ON r.student_id = s.id
+          LEFT JOIN classes c ON s.class_id = c.id
+          LEFT JOIN fee_structures fs ON v.fee_structure_id = fs.id
+          ${whereClause}
+          ${orderClause}
+          LIMIT $1 OFFSET $2
+        `, [limit, offset]);
+
+        reminderData = result.rows.map(row => ({
+          id: row.id,
+          voucher_id: row.voucher_id,
+          student_id: row.student_id,
+          reminder_type: row.reminder_type,
+          due_date: row.due_date,
+          sent_date: row.due_date,
+          last_sent_at: row.last_sent_at,
+          status: row.status,
+          message_content: row.message_content || `Fee payment reminder for ${row.first_name} ${row.last_name} - Amount: ₹${row.total_amount}`,
+          student_name: `${row.first_name} ${row.last_name}`,
+          student_identifier: row.student_identifier,
+          class_name: row.class_name,
+          fee_name: row.fee_name,
+          total_amount: row.total_amount
+        }));
+      } else {
+        // Fallback: Get upcoming due vouchers and create reminder data
+        const offset = (page - 1) * limit;
+        const result = await client.query(`
+          SELECT 
+            v.id as voucher_id,
+            v.student_id,
+            v.due_date,
+            s.first_name,
+            s.last_name,
+            s.student_id as student_identifier,
+            c.class_name,
+            CONCAT('Fee Structure #', fs.id) as fee_name,
+            (fs.tuition_fee + fs.library_fee + fs.lab_fee + fs.sports_fee + fs.transport_fee + fs.examination_fee + fs.development_fee) as total_amount,
+            r.last_sent_at,
+            r.sent_date,
+            r.status as reminder_status
+          FROM fee_vouchers v
+          LEFT JOIN students s ON v.student_id = s.id
+          LEFT JOIN classes c ON s.class_id = c.id
+          LEFT JOIN fee_structures fs ON v.fee_structure_id = fs.id
+          LEFT JOIN fee_reminders r ON v.id = r.voucher_id
+          WHERE v.due_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '${days_ahead} days'
+          AND v.status = 'pending'
+          ORDER BY v.due_date ASC
+          LIMIT $1 OFFSET $2
+        `, [limit, offset]);
+
+        reminderData = result.rows.map(row => ({
+          id: row.voucher_id,
+          voucher_id: row.voucher_id,
+          student_id: row.student_id,
+          reminder_type: 'sms', // Default reminder type
+          due_date: row.due_date,
+          sent_date: row.due_date,
+          last_sent_at: row.last_sent_at || row.sent_date || null, // Use actual sent date if available
+          status: row.reminder_status || 'pending',
+          message_content: `Fee payment reminder for ${row.first_name} ${row.last_name} - Amount: ₹${row.total_amount}`,
+          student_name: `${row.first_name} ${row.last_name}`,
+          student_identifier: row.student_identifier,
+          class_name: row.class_name,
+          fee_name: row.fee_name,
+          total_amount: row.total_amount
+        }));
+      }
+      
+      // If no upcoming reminders found, try to get any pending vouchers as potential reminders
+      if (reminderData.length === 0) {
+        const offset = (page - 1) * limit;
+        const result = await client.query(`
+          SELECT 
+            v.id as voucher_id,
+            v.student_id,
+            v.due_date,
+            s.first_name,
+            s.last_name,
+            s.student_id as student_identifier,
+            c.class_name,
+            CONCAT('Fee Structure #', fs.id) as fee_name,
+            (fs.tuition_fee + fs.library_fee + fs.lab_fee + fs.sports_fee + fs.transport_fee + fs.examination_fee + fs.development_fee) as total_amount,
+            r.last_sent_at,
+            r.sent_date,
+            r.status as reminder_status
+          FROM fee_vouchers v
+          LEFT JOIN students s ON v.student_id = s.id
+          LEFT JOIN classes c ON s.class_id = c.id
+          LEFT JOIN fee_structures fs ON v.fee_structure_id = fs.id
+          LEFT JOIN fee_reminders r ON v.id = r.voucher_id
+          WHERE v.status = 'pending'
+          ORDER BY v.due_date ASC
+          LIMIT $1 OFFSET $2
+        `, [limit, offset]);
+
+        reminderData = result.rows.map(row => ({
+          id: row.voucher_id,
+          voucher_id: row.voucher_id,
+          student_id: row.student_id,
+          reminder_type: 'sms', // Default reminder type
+          due_date: row.due_date,
+          sent_date: row.due_date,
+          last_sent_at: row.last_sent_at || row.sent_date || null, // Use actual sent date if available
+          status: row.reminder_status || 'pending',
+          message_content: `Fee payment reminder for ${row.first_name} ${row.last_name} - Amount: ₹${row.total_amount}`,
+          student_name: `${row.first_name} ${row.last_name}`,
+          student_identifier: row.student_identifier,
+          class_name: row.class_name,
+          fee_name: row.fee_name,
+          total_amount: row.total_amount
+        }));
+      }
+
+      // Get total count
+      let totalRecords = 0;
+      if (remindersTableCheck.rows[0].exists) {
+        // Use the same column logic for count query
+        const columnCheck = await client.query(`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = 'fee_reminders' 
+          AND table_schema = 'public'
+        `);
+        
+        const columns = columnCheck.rows.map(row => row.column_name);
+        const hasDueDate = columns.includes('due_date');
+        
+        let countWhereClause = '';
+        if (hasDueDate) {
+          countWhereClause = `WHERE r.due_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '${days_ahead} days'`;
+        } else {
+          countWhereClause = `WHERE v.due_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '${days_ahead} days'`;
+        }
+        
+        const countResult = await client.query(`
+          SELECT COUNT(*) FROM fee_reminders r
+          LEFT JOIN fee_vouchers v ON r.voucher_id = v.id
+          ${countWhereClause}
+        `);
+        totalRecords = parseInt(countResult.rows[0].count);
+      } else {
+        // First try to count upcoming vouchers
+        const upcomingCountResult = await client.query(`
+          SELECT COUNT(*) FROM fee_vouchers 
+          WHERE due_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '${days_ahead} days'
+          AND status = 'pending'
+        `);
+        totalRecords = parseInt(upcomingCountResult.rows[0].count);
+        
+        // If no upcoming vouchers, count all pending vouchers
+        if (totalRecords === 0) {
+          const allPendingCountResult = await client.query(`
+            SELECT COUNT(*) FROM fee_vouchers 
+            WHERE status = 'pending'
+          `);
+          totalRecords = parseInt(allPendingCountResult.rows[0].count);
+        }
+      }
+      const totalPages = Math.ceil(totalRecords / limit);
+
+      res.json({
+        success: true,
+        data: reminderData,
+        pagination: {
+          current_page: parseInt(page),
+          total_pages: totalPages,
+          total_records: totalRecords,
+          limit: parseInt(limit)
+        }
+      });
+
+    } finally {
+      client.release();
+      tenantPool.end();
+    }
+
+  } catch (error) {
+    console.error('Error getting upcoming reminders:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to get upcoming reminders'
+    });
+  }
+};
+
 // Send overdue fee reminders
 const sendOverdueReminders = async (req, res) => {
   try {
@@ -1748,27 +2301,73 @@ const getReminderHistory = async (req, res) => {
       const offset = (page - 1) * limit;
       params.push(limit, offset);
       
+      // Check if last_sent_at column exists in fee_reminders table
+      const columnCheck = await client.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'fee_reminders' 
+        AND column_name IN ('last_sent_at', 'sent_date')
+        AND table_schema = 'public'
+      `);
+      
+      const hasLastSentAt = columnCheck.rows.some(row => row.column_name === 'last_sent_at');
+      const hasSentDate = columnCheck.rows.some(row => row.column_name === 'sent_date');
+      
+      // Build dynamic query based on available columns
+      const lastSentAtField = hasLastSentAt ? 'r.last_sent_at' : (hasSentDate ? 'r.sent_date' : 'NULL');
+      const orderByClause = hasLastSentAt ? 'r.sent_date DESC, r.last_sent_at DESC' : 'r.sent_date DESC';
+      
       const query = `
         SELECT 
-          r.*,
-          s.first_name || ' ' || s.last_name as student_name,
-          v.voucher_number,
-          v.balance_amount,
-          c.class_name
+          r.id,
+          r.voucher_id,
+          r.student_id,
+          r.reminder_type,
+          r.due_date,
+          r.sent_date,
+          ${lastSentAtField} as last_sent_at,
+          r.status,
+          r.message_content,
+          s.first_name,
+          s.last_name,
+          s.student_id as student_identifier,
+          v.due_date as voucher_due_date,
+          c.class_name,
+          CONCAT('Fee Structure #', fs.id) as fee_name,
+          (fs.tuition_fee + fs.library_fee + fs.lab_fee + fs.sports_fee + fs.transport_fee + fs.examination_fee + fs.development_fee) as total_amount
         FROM fee_reminders r
         LEFT JOIN students s ON r.student_id = s.id
         LEFT JOIN fee_vouchers v ON r.voucher_id = v.id
-        LEFT JOIN classes c ON v.class_id = c.id
+        LEFT JOIN classes c ON s.class_id = c.id
+        LEFT JOIN fee_structures fs ON v.fee_structure_id = fs.id
         ${whereClause}
-        ORDER BY r.sent_date DESC
+        ORDER BY ${orderByClause}
         LIMIT $${params.length - 1} OFFSET $${params.length}
       `;
       
       const result = await client.query(query, params);
       
+      // Transform data to match the format used by other reminder functions
+      const transformedData = result.rows.map(row => ({
+        id: row.id,
+        voucher_id: row.voucher_id,
+        student_id: row.student_id,
+        reminder_type: row.reminder_type || 'sms',
+        due_date: row.due_date || row.voucher_due_date,
+        sent_date: row.sent_date,
+        last_sent_at: row.last_sent_at || row.sent_date || null,
+        status: row.status || 'pending',
+        message_content: row.message_content || `Fee payment reminder for ${row.first_name} ${row.last_name}`,
+        student_name: `${row.first_name} ${row.last_name}`,
+        student_identifier: row.student_identifier,
+        class_name: row.class_name,
+        fee_name: row.fee_name,
+        total_amount: row.total_amount
+      }));
+      
       res.json({
         success: true,
-        data: result.rows,
+        data: transformedData,
         pagination: {
           current_page: parseInt(page),
           total_pages: Math.ceil(totalRecords / limit),
@@ -2186,6 +2785,8 @@ module.exports = {
   updateStudentScholarship,
   
   // Reminders
+  getOverdueReminders,
+  getUpcomingReminders,
   sendOverdueReminders,
   sendUpcomingReminders,
   getReminderHistory,
