@@ -2301,22 +2301,7 @@ const getReminderHistory = async (req, res) => {
       const offset = (page - 1) * limit;
       params.push(limit, offset);
       
-      // Check if last_sent_at column exists in fee_reminders table
-      const columnCheck = await client.query(`
-        SELECT column_name 
-        FROM information_schema.columns 
-        WHERE table_name = 'fee_reminders' 
-        AND column_name IN ('last_sent_at', 'sent_date')
-        AND table_schema = 'public'
-      `);
-      
-      const hasLastSentAt = columnCheck.rows.some(row => row.column_name === 'last_sent_at');
-      const hasSentDate = columnCheck.rows.some(row => row.column_name === 'sent_date');
-      
-      // Build dynamic query based on available columns
-      const lastSentAtField = hasLastSentAt ? 'r.last_sent_at' : (hasSentDate ? 'r.sent_date' : 'NULL');
-      const orderByClause = hasLastSentAt ? 'r.sent_date DESC, r.last_sent_at DESC' : 'r.sent_date DESC';
-      
+      // Simplified query that avoids problematic columns
       const query = `
         SELECT 
           r.id,
@@ -2325,7 +2310,7 @@ const getReminderHistory = async (req, res) => {
           r.reminder_type,
           r.due_date,
           r.sent_date,
-          ${lastSentAtField} as last_sent_at,
+          r.sent_date as last_sent_at,
           r.status,
           r.message_content,
           s.first_name,
@@ -2341,11 +2326,39 @@ const getReminderHistory = async (req, res) => {
         LEFT JOIN classes c ON s.class_id = c.id
         LEFT JOIN fee_structures fs ON v.fee_structure_id = fs.id
         ${whereClause}
-        ORDER BY ${orderByClause}
+        ORDER BY r.sent_date DESC
         LIMIT $${params.length - 1} OFFSET $${params.length}
       `;
       
-      const result = await client.query(query, params);
+      let result;
+      try {
+        result = await client.query(query, params);
+      } catch (queryError) {
+        console.error('Query error in getReminderHistory:', queryError);
+        // Fallback to a simpler query if the main query fails
+        const fallbackQuery = `
+          SELECT 
+            r.id,
+            r.voucher_id,
+            r.student_id,
+            r.reminder_type,
+            r.due_date,
+            r.sent_date,
+            r.sent_date as last_sent_at,
+            r.status,
+            r.message_content,
+            s.first_name,
+            s.last_name,
+            s.student_id as student_identifier,
+            c.class_name
+          FROM fee_reminders r
+          LEFT JOIN students s ON r.student_id = s.id
+          ${whereClause}
+          ORDER BY r.sent_date DESC
+          LIMIT $${params.length - 1} OFFSET $${params.length}
+        `;
+        result = await client.query(fallbackQuery, params);
+      }
       
       // Transform data to match the format used by other reminder functions
       const transformedData = result.rows.map(row => ({
@@ -2361,8 +2374,8 @@ const getReminderHistory = async (req, res) => {
         student_name: `${row.first_name} ${row.last_name}`,
         student_identifier: row.student_identifier,
         class_name: row.class_name,
-        fee_name: row.fee_name,
-        total_amount: row.total_amount
+        fee_name: row.fee_name || 'Fee Structure',
+        total_amount: row.total_amount || 0
       }));
       
       res.json({
