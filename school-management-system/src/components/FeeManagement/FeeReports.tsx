@@ -116,7 +116,13 @@ const FeeReports: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 fee-reports">
+      <style>{`
+        /* Hide any images (logos) within the reports section */
+        .fee-reports img { display: none !important; }
+        /* Hide decorative icons (Heroicons are SVGs) */
+        .fee-reports svg { display: none !important; }
+      `}</style>
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h2 className="text-2xl font-bold text-gray-900">Fee Reports & Analytics</h2>

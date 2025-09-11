@@ -521,95 +521,95 @@ const StudentForm: React.FC<StudentFormProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6 xl:space-y-8 min-w-full">
-                     {/* Basic Information */}
+          {/* Basic Information */}
            <div className="bg-gray-50 p-3 sm:p-4 xl:p-6 rounded-lg w-full">
             <h4 className="text-md font-medium text-gray-900 mb-3 sm:mb-4">Basic Information</h4>
                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 xl:gap-6">
-               <div>
-                 <label className="block text-sm font-medium text-gray-700">First Name *</label>
-                 <input
-                   type="text"
-                   name="first_name"
-                   value={formData.first_name}
-                   onChange={handleInputChange}
-                   className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 ${
-                     errors.first_name ? 'border-red-500' : ''
-                   }`}
-                 />
-                 {errors.first_name && (
-                   <p className="mt-1 text-sm text-red-600">{errors.first_name}</p>
-                 )}
-               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">First Name *</label>
+                <input
+                  type="text"
+                  name="first_name"
+                  value={formData.first_name}
+                  onChange={handleInputChange}
+                  className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 ${
+                    errors.first_name ? 'border-red-500' : ''
+                  }`}
+                />
+                {errors.first_name && (
+                  <p className="mt-1 text-sm text-red-600">{errors.first_name}</p>
+                )}
+              </div>
 
-               <div>
-                 <label className="block text-sm font-medium text-gray-700">Last Name *</label>
-                 <input
-                   type="text"
-                   name="last_name"
-                   value={formData.last_name}
-                   onChange={handleInputChange}
-                   className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 ${
-                     errors.last_name ? 'border-red-500' : ''
-                   }`}
-                 />
-                 {errors.last_name && (
-                   <p className="mt-1 text-sm text-red-600">{errors.last_name}</p>
-                 )}
-               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Last Name *</label>
+                <input
+                  type="text"
+                  name="last_name"
+                  value={formData.last_name}
+                  onChange={handleInputChange}
+                  className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 ${
+                    errors.last_name ? 'border-red-500' : ''
+                  }`}
+                />
+                {errors.last_name && (
+                  <p className="mt-1 text-sm text-red-600">{errors.last_name}</p>
+                )}
+              </div>
 
-               <div>
-                 <label className="block text-sm font-medium text-gray-700">Email *</label>
-                 <input
-                   type="email"
-                   name="email"
-                   value={formData.email}
-                   onChange={handleInputChange}
-                   className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 ${
-                     errors.email ? 'border-red-500' : ''
-                   }`}
-                 />
-                 {errors.email && (
-                   <p className="mt-1 text-sm text-red-600">{errors.email}</p>
-                 )}
-               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Email *</label>
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 ${
+                    errors.email ? 'border-red-500' : ''
+                  }`}
+                />
+                {errors.email && (
+                  <p className="mt-1 text-sm text-red-600">{errors.email}</p>
+                )}
+              </div>
 
-               <div>
-                 <label className="block text-sm font-medium text-gray-700">Phone</label>
-                 <input
-                   type="tel"
-                   name="phone"
-                   value={formData.phone}
-                   onChange={handleInputChange}
-                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                 />
-               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Phone</label>
+                <input
+                  type="tel"
+                  name="phone"
+                  value={formData.phone}
+                  onChange={handleInputChange}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                />
+              </div>
 
-               <div>
-                 <label className="block text-sm font-medium text-gray-700">Date of Birth</label>
-                 <input
-                   type="date"
-                   name="date_of_birth"
-                   value={formData.date_of_birth || ''}
-                   onChange={handleInputChange}
-                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                 />
-               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Date of Birth</label>
+                <input
+                  type="date"
+                  name="date_of_birth"
+                  value={formData.date_of_birth || ''}
+                  onChange={handleInputChange}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                />
+              </div>
 
-               <div>
-                 <label className="block text-sm font-medium text-gray-700">Gender</label>
-                 <select
-                   name="gender"
-                   value={formData.gender}
-                   onChange={handleInputChange}
-                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                 >
-                   <option value="">Select gender</option>
-                   <option value="male">Male</option>
-                   <option value="female">Female</option>
-                   <option value="other">Other</option>
-                 </select>
-               </div>
-             </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Gender</label>
+                <select
+                  name="gender"
+                  value={formData.gender}
+                  onChange={handleInputChange}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                >
+                  <option value="">Select gender</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+            </div>
 
             <div className="mt-4">
               <label className="block text-sm font-medium text-gray-700">Address</label>
@@ -623,7 +623,7 @@ const StudentForm: React.FC<StudentFormProps> = ({
             </div>
           </div>
 
-                     {/* Academic Information */}
+          {/* Academic Information */}
            <div className="bg-gray-50 p-3 sm:p-4 xl:p-6 rounded-lg w-full">
             <h4 className="text-md font-medium text-gray-900 mb-3 sm:mb-4">Academic Information</h4>
             
@@ -633,23 +633,23 @@ const StudentForm: React.FC<StudentFormProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 xl:gap-6 mt-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Class *</label>
-                <select
-                  name="class_id"
-                  value={formData.class_id === null ? 'unassigned' : (formData.class_id || '')}
-                  onChange={handleInputChange}
+                                 <select
+                   name="class_id"
+                   value={formData.class_id === null ? 'unassigned' : (formData.class_id || '')}
+                   onChange={handleInputChange}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                   required
-                >
-                  <option value="">Select class</option>
-                  {classes.map(cls => {
-                    return (
-                      <option key={cls.id} value={cls.id}>
-                        {cls.class_name} ({cls.grade_level})
-                      </option>
-                    );
-                  })}
-                  <option value="unassigned">📋 Assign Later</option>
-                </select>
+                 >
+                   <option value="">Select class</option>
+                                       {classes.map(cls => {
+                      return (
+                        <option key={cls.id} value={cls.id}>
+                          {cls.class_name} ({cls.grade_level})
+                        </option>
+                      );
+                    })}
+                   <option value="unassigned">📋 Assign Later</option>
+                 </select>
                 {errors.class_id && (
                   <p className="mt-1 text-sm text-red-600">{errors.class_id}</p>
                 )}
@@ -693,7 +693,7 @@ const StudentForm: React.FC<StudentFormProps> = ({
                   onChange={handleInputChange}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                 />
-              </div>
+            </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700">Previous School</label>
@@ -705,7 +705,7 @@ const StudentForm: React.FC<StudentFormProps> = ({
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                 />
               </div>
-            </div>
+              </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 xl:gap-6 mt-4">
               <div>
@@ -794,7 +794,7 @@ const StudentForm: React.FC<StudentFormProps> = ({
             </div>
           </div>
 
-                     {/* Emergency Contact */}
+          {/* Emergency Contact */}
            <div className="bg-gray-50 p-3 sm:p-4 xl:p-6 rounded-lg w-full">
             <h4 className="text-md font-medium text-gray-900 mb-3 sm:mb-4">Emergency Contact</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 xl:gap-6">
@@ -833,7 +833,7 @@ const StudentForm: React.FC<StudentFormProps> = ({
             </div>
           </div>
 
-                     {/* Medical Information */}
+          {/* Medical Information */}
            <div className="bg-gray-50 p-3 sm:p-4 xl:p-6 rounded-lg w-full">
             <h4 className="text-md font-medium text-gray-900 mb-3 sm:mb-4">Medical Information</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 xl:gap-6">
