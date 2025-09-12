@@ -42,6 +42,7 @@ const {
 
   // Reports
   getFeeStats,
+  getFeeManagementStats,
   getMonthlyFeeData,
   getClassWisePerformance,
   getPaymentMethodDistribution,
@@ -186,6 +187,9 @@ router.get('/reminders/history', getReminderHistory);
 
 // GET /api/fees/reports/stats - Get fee statistics
 router.get('/reports/stats', getFeeStats);
+
+// GET /api/fees/reports/management-stats - Get comprehensive fee management statistics
+router.get('/reports/management-stats', getFeeManagementStats);
 
 // GET /api/fees/reports/monthly - Get monthly fee data
 router.get('/reports/monthly', getMonthlyFeeData);

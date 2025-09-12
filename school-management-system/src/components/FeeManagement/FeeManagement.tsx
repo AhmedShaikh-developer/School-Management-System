@@ -120,22 +120,37 @@ const FeeManagement: React.FC = () => {
   const fetchStats = async () => {
     setLoading(true);
     try {
-      // This would be implemented as a stats endpoint in the backend
-      // For now, we'll simulate the stats
-      const mockStats: FeeStats = {
-        total_collections: 1250000,
-        pending_amount: 450000,
-        overdue_amount: 125000,
-        total_vouchers: 850,
-        paid_vouchers: 520,
-        pending_vouchers: 280,
-        overdue_vouchers: 50
-      };
-      
-      setStats(mockStats);
+      const response = await fetch('http://localhost:5000/api/fees/reports/management-stats', {
+        headers: {
+          'Authorization': `Bearer ${tenantToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setStats(data.data);
+        } else {
+          throw new Error(data.error || 'Failed to fetch statistics');
+        }
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch statistics');
+      }
     } catch (error) {
       console.error('Failed to fetch stats:', error);
       toast.error('Failed to load statistics');
+      // Set default values if API fails
+      setStats({
+        total_collections: 0,
+        pending_amount: 0,
+        overdue_amount: 0,
+        total_vouchers: 0,
+        paid_vouchers: 0,
+        pending_vouchers: 0,
+        overdue_vouchers: 0
+      });
     } finally {
       setLoading(false);
     }
@@ -254,7 +269,7 @@ const FeeManagement: React.FC = () => {
                 <div>
                   <p className="text-sm font-medium text-gray-600">Total Collections</p>
                   <p className="text-2xl font-bold text-green-600">
-                    {stats ? formatCurrency(stats.total_collections) : '₹0'}
+                    {loading ? 'Loading...' : (stats ? formatCurrency(stats.total_collections) : '₹0')}
                   </p>
                 </div>
               </div>
@@ -263,7 +278,7 @@ const FeeManagement: React.FC = () => {
                 <div>
                   <p className="text-sm font-medium text-gray-600">Pending Amount</p>
                   <p className="text-2xl font-bold text-yellow-600">
-                    {stats ? formatCurrency(stats.pending_amount) : '₹0'}
+                    {loading ? 'Loading...' : (stats ? formatCurrency(stats.pending_amount) : '₹0')}
                   </p>
                 </div>
               </div>
@@ -272,7 +287,7 @@ const FeeManagement: React.FC = () => {
                 <div>
                   <p className="text-sm font-medium text-gray-600">Overdue Amount</p>
                   <p className="text-2xl font-bold text-red-600">
-                    {stats ? formatCurrency(stats.overdue_amount) : '₹0'}
+                    {loading ? 'Loading...' : (stats ? formatCurrency(stats.overdue_amount) : '₹0')}
                   </p>
                 </div>
               </div>
@@ -281,7 +296,7 @@ const FeeManagement: React.FC = () => {
                 <div>
                   <p className="text-sm font-medium text-gray-600">Total Vouchers</p>
                   <p className="text-2xl font-bold text-blue-600">
-                    {stats ? stats.total_vouchers : 0}
+                    {loading ? 'Loading...' : (stats ? stats.total_vouchers : 0)}
                   </p>
                 </div>
               </div>
@@ -293,19 +308,19 @@ const FeeManagement: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="text-center p-4 bg-green-50 rounded-lg">
                   <p className="text-2xl font-bold text-green-600">
-                    {stats ? stats.paid_vouchers : 0}
+                    {loading ? 'Loading...' : (stats ? stats.paid_vouchers : 0)}
                   </p>
                   <p className="text-sm text-green-800">Paid</p>
                 </div>
                 <div className="text-center p-4 bg-yellow-50 rounded-lg">
                   <p className="text-2xl font-bold text-yellow-600">
-                    {stats ? stats.pending_vouchers : 0}
+                    {loading ? 'Loading...' : (stats ? stats.pending_vouchers : 0)}
                   </p>
                   <p className="text-sm text-yellow-800">Pending</p>
                 </div>
                 <div className="text-center p-4 bg-red-50 rounded-lg">
                   <p className="text-2xl font-bold text-red-600">
-                    {stats ? stats.overdue_vouchers : 0}
+                    {loading ? 'Loading...' : (stats ? stats.overdue_vouchers : 0)}
                   </p>
                   <p className="text-sm text-red-800">Overdue</p>
                 </div>

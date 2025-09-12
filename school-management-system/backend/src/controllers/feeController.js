@@ -2489,6 +2489,109 @@ const getFeeStats = async (req, res) => {
   }
 };
 
+const getFeeManagementStats = async (req, res) => {
+  try {
+    const { tenant_id: tenantId } = req.tenant;
+    const { class_id = 'all' } = req.query;
+
+    const tenantDbName = await getTenantDatabaseName(tenantId);
+    const tenantPool = createTenantPool(tenantId, tenantDbName);
+    const client = await tenantPool.connect();
+
+    try {
+      let classFilter = '';
+      if (class_id !== 'all') {
+        classFilter = `AND v.class_id = ${class_id}`;
+      }
+
+      // Get total collections (all time)
+      const collectionsResult = await client.query(`
+        SELECT COALESCE(SUM(fp.amount_paid), 0) as total_collections
+        FROM fee_payments fp
+        JOIN fee_vouchers v ON fp.voucher_id = v.id
+        WHERE 1=1 ${classFilter}
+      `);
+
+      // Get pending amount
+      const pendingResult = await client.query(`
+        SELECT COALESCE(SUM(v.balance_amount), 0) as pending_amount
+        FROM fee_vouchers v
+        WHERE v.status = 'pending' ${classFilter}
+      `);
+
+      // Get overdue amount
+      const overdueResult = await client.query(`
+        SELECT COALESCE(SUM(v.balance_amount), 0) as overdue_amount
+        FROM fee_vouchers v
+        WHERE v.status = 'pending' AND v.due_date < CURRENT_DATE ${classFilter}
+      `);
+
+      // Get total vouchers count
+      const totalVouchersResult = await client.query(`
+        SELECT COUNT(*) as total_vouchers
+        FROM fee_vouchers v
+        WHERE 1=1 ${classFilter}
+      `);
+
+      // Get paid vouchers count
+      const paidVouchersResult = await client.query(`
+        SELECT COUNT(*) as paid_vouchers
+        FROM fee_vouchers v
+        WHERE v.status = 'paid' ${classFilter}
+      `);
+
+      // Get pending vouchers count
+      const pendingVouchersResult = await client.query(`
+        SELECT COUNT(*) as pending_vouchers
+        FROM fee_vouchers v
+        WHERE v.status = 'pending' ${classFilter}
+      `);
+
+      // Get overdue vouchers count
+      const overdueVouchersResult = await client.query(`
+        SELECT COUNT(*) as overdue_vouchers
+        FROM fee_vouchers v
+        WHERE v.status = 'pending' AND v.due_date < CURRENT_DATE ${classFilter}
+      `);
+
+      const totalCollections = parseFloat(collectionsResult.rows[0].total_collections);
+      const pendingAmount = parseFloat(pendingResult.rows[0].pending_amount);
+      const overdueAmount = parseFloat(overdueResult.rows[0].overdue_amount);
+      const totalVouchers = parseInt(totalVouchersResult.rows[0].total_vouchers);
+      const paidVouchers = parseInt(paidVouchersResult.rows[0].paid_vouchers);
+      const pendingVouchers = parseInt(pendingVouchersResult.rows[0].pending_vouchers);
+      const overdueVouchers = parseInt(overdueVouchersResult.rows[0].overdue_vouchers);
+
+      const totalAmount = totalCollections + pendingAmount;
+      const collectionRate = totalAmount > 0 ? (totalCollections / totalAmount) * 100 : 0;
+
+      res.json({
+        success: true,
+        data: {
+          total_collections: totalCollections,
+          pending_amount: pendingAmount,
+          overdue_amount: overdueAmount,
+          total_vouchers: totalVouchers,
+          paid_vouchers: paidVouchers,
+          pending_vouchers: pendingVouchers,
+          overdue_vouchers: overdueVouchers,
+          collection_rate: collectionRate
+        }
+      });
+
+    } finally {
+      client.release();
+      tenantPool.end();
+    }
+  } catch (error) {
+    console.error('Error fetching fee management stats:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch fee management stats'
+    });
+  }
+};
+
 const getMonthlyFeeData = async (req, res) => {
   try {
     const { tenant_id: tenantId } = req.tenant;
@@ -2939,6 +3042,7 @@ module.exports = {
   
   // Reports
   getFeeStats,
+  getFeeManagementStats,
   getMonthlyFeeData,
   getClassWisePerformance,
   getPaymentMethodDistribution,
