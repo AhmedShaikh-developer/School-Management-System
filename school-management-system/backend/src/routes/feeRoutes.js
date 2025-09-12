@@ -43,6 +43,8 @@ const {
   // Reports
   getFeeStats,
   getMonthlyFeeData,
+  getClassWisePerformance,
+  getPaymentMethodDistribution,
   
   // Logo
   getSchoolLogo
@@ -187,6 +189,12 @@ router.get('/reports/stats', getFeeStats);
 
 // GET /api/fees/reports/monthly - Get monthly fee data
 router.get('/reports/monthly', getMonthlyFeeData);
+
+// GET /api/fees/reports/class-wise - Get class-wise performance
+router.get('/reports/class-wise', getClassWisePerformance);
+
+// GET /api/fees/reports/payment-methods - Get payment method distribution
+router.get('/reports/payment-methods', getPaymentMethodDistribution);
 
 // =======================
 // LOGO ROUTES

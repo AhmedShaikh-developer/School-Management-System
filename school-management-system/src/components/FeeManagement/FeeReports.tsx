@@ -16,6 +16,30 @@ interface MonthlyData {
   pending: number;
 }
 
+interface ClassPerformance {
+  class_id: number;
+  class_name: string;
+  grade_level: string;
+  collections: number;
+  pending: number;
+  total_due: number;
+  student_count: number;
+  collection_rate: number;
+}
+
+interface PaymentMethod {
+  method: string;
+  amount: number;
+  count: number;
+  percentage: number;
+}
+
+interface Class {
+  id: number;
+  class_name: string;
+  grade_level: string;
+}
+
 const FeeReports: React.FC = () => {
   const { tenantToken } = useTenant();
   const [stats, setStats] = useState<FeeStats>({
@@ -26,14 +50,42 @@ const FeeReports: React.FC = () => {
     collection_rate: 0
   });
   const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
+  const [classPerformance, setClassPerformance] = useState<ClassPerformance[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [classes, setClasses] = useState<Class[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState('current_month');
   const [selectedClass, setSelectedClass] = useState('all');
 
   useEffect(() => {
+    fetchClasses();
     fetchFeeStats();
     fetchMonthlyData();
+    fetchClassPerformance();
+    fetchPaymentMethods();
   }, [tenantToken, selectedPeriod, selectedClass]);
+
+  const fetchClasses = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/classes', {
+        headers: {
+          'Authorization': `Bearer ${tenantToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setClasses(data.data);
+        }
+      } else {
+        console.error('Failed to fetch classes');
+      }
+    } catch (error) {
+      console.error('Error fetching classes:', error);
+    }
+  };
 
   const fetchFeeStats = async () => {
     setLoading(true);
@@ -92,6 +144,59 @@ const FeeReports: React.FC = () => {
     }
   };
 
+  const fetchClassPerformance = async () => {
+    try {
+      const params = new URLSearchParams({
+        period: selectedPeriod
+      });
+
+      const response = await fetch(`http://localhost:5000/api/fees/reports/class-wise?${params}`, {
+        headers: {
+          'Authorization': `Bearer ${tenantToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setClassPerformance(data.data);
+        }
+      } else {
+        console.error('Failed to fetch class performance data');
+      }
+    } catch (error) {
+      console.error('Error fetching class performance data:', error);
+    }
+  };
+
+  const fetchPaymentMethods = async () => {
+    try {
+      const params = new URLSearchParams({
+        period: selectedPeriod,
+        class_id: selectedClass
+      });
+
+      const response = await fetch(`http://localhost:5000/api/fees/reports/payment-methods?${params}`, {
+        headers: {
+          'Authorization': `Bearer ${tenantToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setPaymentMethods(data.data);
+        }
+      } else {
+        console.error('Failed to fetch payment methods data');
+      }
+    } catch (error) {
+      console.error('Error fetching payment methods data:', error);
+    }
+  };
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
@@ -143,11 +248,11 @@ const FeeReports: React.FC = () => {
             className="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
           >
             <option value="all">All Classes</option>
-            <option value="1">Class 1</option>
-            <option value="2">Class 2</option>
-            <option value="3">Class 3</option>
-            <option value="4">Class 4</option>
-            <option value="5">Class 5</option>
+            {classes.map((cls) => (
+              <option key={cls.id} value={cls.id.toString()}>
+                {cls.class_name} (Grade {cls.grade_level})
+              </option>
+            ))}
           </select>
         </div>
       </div>
@@ -272,50 +377,87 @@ const FeeReports: React.FC = () => {
         {/* Class-wise Performance */}
         <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Class-wise Performance</h3>
-          <div className="space-y-3">
-            {[1, 2, 3, 4, 5].map((classNum) => (
-              <div key={classNum} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <span className="font-medium text-gray-700">Class {classNum}</span>
-                <div className="flex items-center space-x-4">
-                  <span className="text-sm text-gray-600">
-                    {formatCurrency(Math.floor(Math.random() * 50000) + 20000)}
-                  </span>
-                  <div className="w-20 bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-blue-600 h-2 rounded-full"
-                      style={{ width: `${Math.floor(Math.random() * 100)}%` }}
-                    ></div>
+          {loading ? (
+            <div className="h-32 flex items-center justify-center">
+              <div className="text-gray-500">Loading class performance data...</div>
+            </div>
+          ) : classPerformance.length === 0 ? (
+            <div className="h-32 flex items-center justify-center">
+              <div className="text-gray-500">No class performance data available</div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {classPerformance.map((classData) => (
+                <div key={classData.class_id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex flex-col">
+                    <span className="font-medium text-gray-700">{classData.class_name}</span>
+                    <span className="text-xs text-gray-500">Grade {classData.grade_level} • {classData.student_count} students</span>
+                  </div>
+                  <div className="flex items-center space-x-4">
+                    <div className="text-right">
+                      <div className="text-sm font-medium text-gray-900">
+                        {formatCurrency(classData.collections)}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        of {formatCurrency(classData.total_due)}
+                      </div>
+                    </div>
+                    <div className="w-20 bg-gray-200 rounded-full h-2">
+                      <div 
+                        className="bg-blue-600 h-2 rounded-full"
+                        style={{ width: `${Math.min(classData.collection_rate, 100)}%` }}
+                      ></div>
+                    </div>
+                    <span className="text-xs text-gray-600 w-12">
+                      {classData.collection_rate.toFixed(1)}%
+                    </span>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Payment Method Distribution */}
         <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Payment Method Distribution</h3>
-          <div className="space-y-3">
-            {[
-              { method: 'Cash', percentage: 45, color: 'bg-green-500' },
-              { method: 'Online', percentage: 35, color: 'bg-blue-500' },
-              { method: 'Cheque', percentage: 15, color: 'bg-purple-500' },
-              { method: 'Bank Transfer', percentage: 5, color: 'bg-indigo-500' }
-            ].map((item, index) => (
-              <div key={index} className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-700">{item.method}</span>
-                <div className="flex items-center space-x-2">
-                  <div className="w-20 bg-gray-200 rounded-full h-2">
-                    <div 
-                      className={`${item.color} h-2 rounded-full`}
-                      style={{ width: `${item.percentage}%` }}
-                    ></div>
+          {loading ? (
+            <div className="h-32 flex items-center justify-center">
+              <div className="text-gray-500">Loading payment method data...</div>
+            </div>
+          ) : paymentMethods.length === 0 ? (
+            <div className="h-32 flex items-center justify-center">
+              <div className="text-gray-500">No payment method data available</div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {paymentMethods.map((method, index) => {
+                const colors = ['bg-green-500', 'bg-blue-500', 'bg-purple-500', 'bg-indigo-500', 'bg-yellow-500'];
+                const color = colors[index % colors.length];
+                
+                return (
+                  <div key={method.method} className="flex items-center justify-between">
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium text-gray-700 capitalize">{method.method}</span>
+                      <span className="text-xs text-gray-500">{method.count} transactions</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <div className="w-20 bg-gray-200 rounded-full h-2">
+                        <div 
+                          className={`${color} h-2 rounded-full`}
+                          style={{ width: `${method.percentage}%` }}
+                        ></div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-medium text-gray-900">{method.percentage.toFixed(1)}%</div>
+                        <div className="text-xs text-gray-500">{formatCurrency(method.amount)}</div>
+                      </div>
+                    </div>
                   </div>
-                  <span className="text-sm text-gray-600 w-12">{item.percentage}%</span>
-                </div>
-              </div>
-            ))}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 

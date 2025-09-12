@@ -2433,7 +2433,7 @@ const getFeeStats = async (req, res) => {
         SELECT COALESCE(SUM(fp.amount_paid), 0) as total_collections
         FROM fee_payments fp
         JOIN fee_vouchers v ON fp.voucher_id = v.id
-        WHERE fp.status = 'completed' ${dateFilter} ${classFilter}
+        WHERE 1=1 ${dateFilter} ${classFilter}
       `);
 
       // Get pending amount
@@ -2523,7 +2523,7 @@ const getMonthlyFeeData = async (req, res) => {
           COALESCE(SUM(v.balance_amount), 0) as pending
         FROM fee_payments fp
         JOIN fee_vouchers v ON fp.voucher_id = v.id
-        WHERE fp.status = 'completed' ${dateFilter} ${classFilter}
+        WHERE 1=1 ${dateFilter} ${classFilter}
         GROUP BY DATE_TRUNC('month', payment_date)
         ORDER BY DATE_TRUNC('month', payment_date)
       `);
@@ -2546,6 +2546,139 @@ const getMonthlyFeeData = async (req, res) => {
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to fetch monthly fee data'
+    });
+  }
+};
+
+// Get class-wise performance data
+const getClassWisePerformance = async (req, res) => {
+  try {
+    const { tenant_id: tenantId } = req.tenant;
+    const { period = 'current_month' } = req.query;
+
+    const tenantDbName = await getTenantDatabaseName(tenantId);
+    const tenantPool = createTenantPool(tenantId, tenantDbName);
+    const client = await tenantPool.connect();
+
+    try {
+      let dateFilter = '';
+      if (period === 'current_month') {
+        dateFilter = "AND DATE_TRUNC('month', fp.payment_date) = DATE_TRUNC('month', CURRENT_DATE)";
+      } else if (period === 'last_month') {
+        dateFilter = "AND DATE_TRUNC('month', fp.payment_date) = DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')";
+      } else if (period === 'current_quarter') {
+        dateFilter = "AND DATE_TRUNC('month', fp.payment_date) >= DATE_TRUNC('quarter', CURRENT_DATE)";
+      } else if (period === 'current_year') {
+        dateFilter = "AND DATE_TRUNC('month', fp.payment_date) >= DATE_TRUNC('year', CURRENT_DATE)";
+      }
+
+      // Get class-wise performance
+      const result = await client.query(`
+        SELECT 
+          c.id as class_id,
+          c.class_name,
+          c.grade_level,
+          COALESCE(SUM(fp.amount_paid), 0) as collections,
+          COALESCE(SUM(v.balance_amount), 0) as pending,
+          COALESCE(SUM(v.final_amount), 0) as total_due,
+          COUNT(DISTINCT v.student_id) as student_count
+        FROM classes c
+        LEFT JOIN fee_vouchers v ON c.id = v.class_id
+        LEFT JOIN fee_payments fp ON v.id = fp.voucher_id ${dateFilter}
+        WHERE c.status = 'active'
+        GROUP BY c.id, c.class_name, c.grade_level
+        ORDER BY c.grade_level, c.class_name
+      `);
+
+      res.json({
+        success: true,
+        data: result.rows.map(row => ({
+          class_id: row.class_id,
+          class_name: row.class_name,
+          grade_level: row.grade_level,
+          collections: parseFloat(row.collections),
+          pending: parseFloat(row.pending),
+          total_due: parseFloat(row.total_due),
+          student_count: parseInt(row.student_count),
+          collection_rate: parseFloat(row.total_due) > 0 ? (parseFloat(row.collections) / parseFloat(row.total_due)) * 100 : 0
+        }))
+      });
+
+    } finally {
+      client.release();
+      tenantPool.end();
+    }
+  } catch (error) {
+    console.error('Error fetching class-wise performance:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch class-wise performance'
+    });
+  }
+};
+
+// Get payment method distribution
+const getPaymentMethodDistribution = async (req, res) => {
+  try {
+    const { tenant_id: tenantId } = req.tenant;
+    const { period = 'current_month', class_id = 'all' } = req.query;
+
+    const tenantDbName = await getTenantDatabaseName(tenantId);
+    const tenantPool = createTenantPool(tenantId, tenantDbName);
+    const client = await tenantPool.connect();
+
+    try {
+      let dateFilter = '';
+      if (period === 'current_month') {
+        dateFilter = "AND DATE_TRUNC('month', payment_date) = DATE_TRUNC('month', CURRENT_DATE)";
+      } else if (period === 'last_month') {
+        dateFilter = "AND DATE_TRUNC('month', payment_date) = DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')";
+      } else if (period === 'current_quarter') {
+        dateFilter = "AND DATE_TRUNC('month', payment_date) >= DATE_TRUNC('quarter', CURRENT_DATE)";
+      } else if (period === 'current_year') {
+        dateFilter = "AND DATE_TRUNC('month', payment_date) >= DATE_TRUNC('year', CURRENT_DATE)";
+      }
+
+      let classFilter = '';
+      if (class_id !== 'all') {
+        classFilter = `AND v.class_id = ${class_id}`;
+      }
+
+      // Get payment method distribution
+      const result = await client.query(`
+        SELECT 
+          fp.payment_method,
+          COALESCE(SUM(fp.amount_paid), 0) as total_amount,
+          COUNT(*) as transaction_count
+        FROM fee_payments fp
+        JOIN fee_vouchers v ON fp.voucher_id = v.id
+        WHERE 1=1 ${dateFilter} ${classFilter}
+        GROUP BY fp.payment_method
+        ORDER BY total_amount DESC
+      `);
+
+      // Calculate total for percentage calculation
+      const totalAmount = result.rows.reduce((sum, row) => sum + parseFloat(row.total_amount), 0);
+
+      res.json({
+        success: true,
+        data: result.rows.map(row => ({
+          method: row.payment_method,
+          amount: parseFloat(row.total_amount),
+          count: parseInt(row.transaction_count),
+          percentage: totalAmount > 0 ? (parseFloat(row.total_amount) / totalAmount) * 100 : 0
+        }))
+      });
+
+    } finally {
+      client.release();
+      tenantPool.end();
+    }
+  } catch (error) {
+    console.error('Error fetching payment method distribution:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch payment method distribution'
     });
   }
 };
@@ -2807,6 +2940,8 @@ module.exports = {
   // Reports
   getFeeStats,
   getMonthlyFeeData,
+  getClassWisePerformance,
+  getPaymentMethodDistribution,
   
   // Logo
   getSchoolLogo
