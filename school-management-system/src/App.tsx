@@ -2,6 +2,8 @@ import React, { useState, useEffect, createContext, useContext } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation, useSearchParams, NavLink } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { Formik, Form, Field, ErrorMessage } from 'formik';
+import * as Yup from 'yup';
 import TenantOnboardingForm from './components/TenantOnboardingForm';
 import CustomDomainSetup from './components/CustomDomainSetup';
 import BrandingCustomization from './components/BrandingCustomization';
@@ -350,18 +352,12 @@ const OnboardingPage: React.FC = () => {
 
 // Tenant Login Page Component
 const TenantLoginPage: React.FC = () => {
-  const [domain, setDomain] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
   const { setTenantId, setIsAuthenticated, setTenantUser, setTenantInfo, setTenantToken, setTenantRefreshToken } = useTenant();
   const navigate = useNavigate();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (values: any, { setSubmitting, setFieldError }: any) => {
     setIsLoading(true);
-    setError('');
 
     try {
       const response = await fetch('http://localhost:5000/api/tenant-auth/login', {
@@ -369,7 +365,7 @@ const TenantLoginPage: React.FC = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ domain, email, password }),
+        body: JSON.stringify({ domain: values.domain, email: values.email, password: values.password }),
       });
 
       const data = await response.json();
@@ -393,126 +389,138 @@ const TenantLoginPage: React.FC = () => {
         // Navigate to dashboard
         navigate('/dashboard');
       } else {
-        setError(data.message || 'Login failed');
+        setFieldError('password', data.message || 'Invalid credentials');
       }
     } catch (err) {
-      setError('Network error. Please try again.');
+      setFieldError('password', 'Network error. Please try again.');
     } finally {
       setIsLoading(false);
+      setSubmitting(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          Sign in to your school
-        </h2>
-        <p className="mt-2 text-center text-sm text-gray-600">
-          Enter your school domain and credentials
-        </p>
-      </div>
+    <div className="tenant-login-container">
+      <div className="tenant-login-card">
+        <div className="tenant-login-header">
+          <div className="tenant-login-icon">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            </svg>
+          </div>
+          <h1 className="tenant-login-title">
+            School Login
+          </h1>
+          <p className="tenant-login-subtitle">
+            Access your school management portal
+          </p>
+        </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
-          <form className="space-y-6" onSubmit={handleSubmit}>
-            <div>
-              <label htmlFor="domain" className="block text-sm font-medium text-gray-700">
-                School Domain
-              </label>
-              <div className="mt-1">
-                <input
+        <Formik
+          initialValues={{
+            domain: '',
+            email: '',
+            password: ''
+          }}
+          validationSchema={Yup.object({
+            domain: Yup.string()
+              .required('School domain is required')
+              .matches(/^[a-z0-9.-]+$/, 'Domain must contain only lowercase letters, numbers, dots, and hyphens'),
+            email: Yup.string()
+              .email('Invalid email address')
+              .required('Email is required'),
+            password: Yup.string()
+              .required('Password is required')
+              .min(6, 'Password must be at least 6 characters')
+          })}
+          onSubmit={handleSubmit}
+        >
+          {({ isSubmitting, isValid, dirty }) => (
+            <Form className="tenant-login-form">
+              <div className="floating-label-group">
+                <Field
+                  type="text"
                   id="domain"
                   name="domain"
-                  type="text"
-                  required
-                  value={domain}
-                  onChange={(e) => setDomain(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  placeholder="your-school"
+                  className="floating-input"
+                  placeholder="your-school-name"
+                  autoComplete="off"
                 />
+                <label htmlFor="domain" className="floating-label">
+                  School Domain <span>*</span>
+                </label>
+                <ErrorMessage name="domain" component="div" className="error-message" />
+                <p className="tenant-login-hint">
+                  Enter your school's unique domain (e.g., your-school)
+                </p>
               </div>
-              <p className="mt-1 text-xs text-gray-500">
-                Enter your school's domain (e.g., your-school)
-              </p>
-            </div>
 
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Email address
-              </label>
-              <div className="mt-1">
-                <input
+              <div className="floating-label-group">
+                <Field
+                  type="email"
                   id="email"
                   name="email"
-                  type="email"
+                  className="floating-input"
+                  placeholder=" "
                   autoComplete="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  placeholder="admin@school.com"
                 />
+                <label htmlFor="email" className="floating-label">
+                  Email Address <span>*</span>
+                </label>
+                <ErrorMessage name="email" component="div" className="error-message" />
               </div>
-            </div>
 
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                Password
-              </label>
-              <div className="mt-1">
-                <input
+              <div className="floating-label-group">
+                <Field
+                  type="password"
                   id="password"
                   name="password"
-                  type="password"
+                  className="floating-input"
+                  placeholder=" "
                   autoComplete="current-password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  placeholder="••••••••"
                 />
+                <label htmlFor="password" className="floating-label">
+                  Password <span>*</span>
+                </label>
+                <ErrorMessage name="password" component="div" className="error-message" />
               </div>
-            </div>
 
-            {error && (
-              <div className="text-red-600 text-sm text-center">
-                {error}
-              </div>
-            )}
-
-            <div>
               <button
                 type="submit"
-                disabled={isLoading}
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={isSubmitting || !isValid || !dirty || isLoading}
+                className="tenant-login-button"
               >
-                {isLoading ? 'Signing in...' : 'Sign in'}
+                {isLoading ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <span>Signing in...</span>
+                  </div>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                    </svg>
+                    Sign In
+                  </>
+                )}
               </button>
-            </div>
-          </form>
+            </Form>
+          )}
+        </Formik>
 
-          <div className="mt-6">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300" />
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">
-                  New to the platform?
-                </span>
-              </div>
-            </div>
-
-            <div className="mt-6">
-              <a
-                href="/onboard"
-                className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-              >
-                Onboard your school
-              </a>
-            </div>
+        <div className="tenant-login-footer">
+          <div className="tenant-login-divider">
+            <div className="tenant-login-divider-line"></div>
+            <span className="tenant-login-divider-text">New to the platform?</span>
+            <div className="tenant-login-divider-line"></div>
           </div>
+
+          <a href="/onboard" className="tenant-login-link">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            Onboard your school
+          </a>
         </div>
       </div>
     </div>
