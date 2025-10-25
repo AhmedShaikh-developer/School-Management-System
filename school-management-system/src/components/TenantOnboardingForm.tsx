@@ -235,222 +235,226 @@ const TenantOnboardingForm: React.FC<TenantOnboardingFormProps> = ({ onSuccess }
   const prevStep = () => setStep(step - 1);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8">
-      <div className="max-w-4xl mx-auto px-4">
-        <div className="bg-white rounded-lg shadow-xl p-8">
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              School Onboarding
-            </h1>
-            <p className="text-gray-600">
-              Set up your school management system in minutes
-            </p>
-          </div>
+    <div className="onboarding-container">
+      <div className="onboarding-card">
+        <div className="onboarding-header">
+          <h1 className="onboarding-title">
+            School Onboarding
+          </h1>
+          <p className="onboarding-subtitle">
+            Set up your school management system in minutes
+          </p>
+        </div>
 
-          {/* Progress Bar */}
-          <div className="mb-8">
-            <div className="flex items-center justify-between">
-              <div className={`flex items-center ${step >= 1 ? 'text-blue-600' : 'text-gray-400'}`}>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 ${
-                  step >= 1 ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'
-                }`}>
-                  1
-                </div>
-                <span className="ml-2 font-medium">School Details</span>
+        {/* Enhanced Progress Bar */}
+        <div className="onboarding-progress">
+          <div className="progress-steps">
+            <div className="progress-line">
+              <div className="progress-line-fill" style={{ width: step === 2 ? '100%' : '50%' }}></div>
+            </div>
+            <div className="progress-step">
+              <div className={`progress-step-circle ${step >= 1 ? 'active' : ''} ${step > 1 ? 'completed' : ''}`}>
+                {step > 1 ? '✓' : '1'}
               </div>
-              <div className={`flex-1 h-1 mx-4 ${step >= 2 ? 'bg-blue-600' : 'bg-gray-300'}`}></div>
-              <div className={`flex items-center ${step >= 2 ? 'text-blue-600' : 'text-gray-400'}`}>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 ${
-                  step >= 2 ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'
-                }`}>
-                  2
-                </div>
-                <span className="ml-2 font-medium">Admin Information</span>
+              <span className="progress-step-label">School Details</span>
+            </div>
+            <div className="progress-step">
+              <div className={`progress-step-circle ${step >= 2 ? 'active' : ''}`}>
+                2
               </div>
+              <span className="progress-step-label">Admin Information</span>
             </div>
           </div>
+        </div>
 
-                                <Formik
-             initialValues={initialValues}
-             validationSchema={step === 1 ? step1ValidationSchema : step2ValidationSchema}
-             onSubmit={handleSubmit}
-           >
-             {({ values, errors, touched, isValid, dirty }: any) => (
-               <Form className="space-y-6">
-                {step === 1 && (
+        <Formik
+          initialValues={initialValues}
+          validationSchema={step === 1 ? step1ValidationSchema : step2ValidationSchema}
+          onSubmit={handleSubmit}
+        >
+          {({ values, errors, touched, isValid, dirty }: any) => (
+            <Form className="space-y-6">
+              {step === 1 && (
                   <div className="space-y-6">
-                    <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                    <h2 className="onboarding-section-title">
                       School Information
                     </h2>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <label htmlFor="schoolName" className="block text-sm font-medium text-gray-700 mb-2">
-                          School Name *
-                        </label>
+                      <div className="floating-label-group">
                         <Field
                           type="text"
                           id="schoolName"
                           name="schoolName"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="Enter school name"
+                          className="floating-input"
+                          placeholder=" "
                         />
-                        <ErrorMessage name="schoolName" component="div" className="text-red-500 text-sm mt-1" />
+                        <label htmlFor="schoolName" className="floating-label">
+                          School Name <span>*</span>
+                        </label>
+                        <ErrorMessage name="schoolName" component="div" className="error-message" />
                       </div>
 
-                      <div>
-                        <label htmlFor="domain" className="block text-sm font-medium text-gray-700 mb-2">
-                          Domain *
-                        </label>
+                      <div className="floating-label-group">
                         <Field
                           type="text"
                           id="domain"
                           name="domain"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="your-school"
+                          className="floating-input"
+                          placeholder=" "
                           onBlur={(e: React.FocusEvent<HTMLInputElement>) => handleDomainBlur(e.target.value)}
                         />
-                        <ErrorMessage name="domain" component="div" className="text-red-500 text-sm mt-1" />
+                        <label htmlFor="domain" className="floating-label">
+                          Domain <span>*</span>
+                          <div className="tooltip-container">
+                            <span className="tooltip-icon">?</span>
+                            <div className="tooltip-content">
+                              Your unique school identifier (e.g., myschool)
+                            </div>
+                          </div>
+                        </label>
+                        <ErrorMessage name="domain" component="div" className="error-message" />
                         {domainChecking && (
                           <div className="text-blue-500 text-sm mt-1">Checking domain availability...</div>
                         )}
                         {domainStatus && (
-                          <div className={`text-sm mt-1 ${domainStatus.available ? 'text-green-500' : 'text-red-500'}`}>
+                          <div className={`${domainStatus.available ? 'success-message' : 'error-message'}`}>
                             {domainStatus.message}
                           </div>
                         )}
                       </div>
 
-                      <div>
-                        <label htmlFor="schoolType" className="block text-sm font-medium text-gray-700 mb-2">
-                          School Type *
-                        </label>
+                      <div className="floating-label-group" style={{ marginBottom: '2rem' }}>
                         <Field
                           as="select"
                           id="schoolType"
                           name="schoolType"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          className="floating-input"
                         >
+                          <option value="">Select school type</option>
                           <option value="primary">Primary School</option>
                           <option value="secondary">Secondary School</option>
                           <option value="high">High School</option>
                           <option value="university">University</option>
                           <option value="other">Other</option>
                         </Field>
-                        <ErrorMessage name="schoolType" component="div" className="text-red-500 text-sm mt-1" />
+                        <label htmlFor="schoolType" className="floating-label">
+                          School Type <span>*</span>
+                        </label>
+                        <ErrorMessage name="schoolType" component="div" className="error-message" />
                       </div>
 
-                      <div>
-                        <label htmlFor="studentCount" className="block text-sm font-medium text-gray-700 mb-2">
-                          Number of Students
-                        </label>
+                      <div className="floating-label-group">
                         <Field
                           type="number"
                           id="studentCount"
                           name="studentCount"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="Enter student count"
+                          className="floating-input"
+                          placeholder=" "
                         />
-                        <ErrorMessage name="studentCount" component="div" className="text-red-500 text-sm mt-1" />
+                        <label htmlFor="studentCount" className="floating-label">
+                          Number of Students
+                        </label>
+                        <ErrorMessage name="studentCount" component="div" className="error-message" />
                       </div>
 
-                      <div className="md:col-span-2">
-                        <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-2">
-                          School Address
-                        </label>
+                      <div className="md:col-span-2 floating-label-group">
                         <Field
                           as="textarea"
                           id="address"
                           name="address"
                           rows={3}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="Enter school address"
+                          className="floating-input"
+                          placeholder=" "
                         />
-                        <ErrorMessage name="address" component="div" className="text-red-500 text-sm mt-1" />
+                        <label htmlFor="address" className="floating-label">
+                          School Address
+                        </label>
+                        <ErrorMessage name="address" component="div" className="error-message" />
                       </div>
 
-                      <div className="md:col-span-2">
-                        <label htmlFor="website" className="block text-sm font-medium text-gray-700 mb-2">
-                          School Website
-                        </label>
+                      <div className="md:col-span-2 floating-label-group">
                         <Field
                           type="url"
                           id="website"
                           name="website"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="https://www.yourschool.com"
+                          className="floating-input"
+                          placeholder=" "
                         />
-                        <ErrorMessage name="website" component="div" className="text-red-500 text-sm mt-1" />
+                        <label htmlFor="website" className="floating-label">
+                          School Website
+                        </label>
+                        <ErrorMessage name="website" component="div" className="error-message" />
                       </div>
                     </div>
 
-                                         <div className="flex justify-end">
-                       <button
-                         type="button"
-                         onClick={nextStep}
-                         disabled={
-                           !isValid || 
-                           !dirty || 
-                           (domainStatus ? !domainStatus.available : false) ||
-                           !values.schoolName || 
-                           !values.domain || 
-                           !values.schoolType
-                         }
-                         className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                       >
-                         Next
-                       </button>
-                     </div>
+                      <div className="onboarding-buttons">
+                        <button
+                          type="button"
+                          onClick={nextStep}
+                          disabled={
+                            !isValid || 
+                            !dirty || 
+                            (domainStatus ? !domainStatus.available : false) ||
+                            !values.schoolName || 
+                            !values.domain || 
+                            !values.schoolType
+                          }
+                          className="onboarding-btn onboarding-btn-primary"
+                        >
+                          Next →
+                        </button>
+                      </div>
                   </div>
                 )}
 
                 {step === 2 && (
                   <div className="space-y-6">
-                    <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                    <h2 className="onboarding-section-title">
                       Administrator Information
                     </h2>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <label htmlFor="adminName" className="block text-sm font-medium text-gray-700 mb-2">
-                          Admin Name *
-                        </label>
+                      <div className="floating-label-group">
                         <Field
                           type="text"
                           id="adminName"
                           name="adminName"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="Enter admin name"
+                          className="floating-input"
+                          placeholder=" "
                         />
-                        <ErrorMessage name="adminName" component="div" className="text-red-500 text-sm mt-1" />
+                        <label htmlFor="adminName" className="floating-label">
+                          Admin Name <span>*</span>
+                        </label>
+                        <ErrorMessage name="adminName" component="div" className="error-message" />
                       </div>
 
-                      <div>
-                        <label htmlFor="adminEmail" className="block text-sm font-medium text-gray-700 mb-2">
-                          Admin Email *
-                        </label>
+                      <div className="floating-label-group">
                         <Field
                           type="email"
                           id="adminEmail"
                           name="adminEmail"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="admin@school.com"
+                          className="floating-input"
+                          placeholder=" "
                         />
-                        <ErrorMessage name="adminEmail" component="div" className="text-red-500 text-sm mt-1" />
+                        <label htmlFor="adminEmail" className="floating-label">
+                          Admin Email <span>*</span>
+                        </label>
+                        <ErrorMessage name="adminEmail" component="div" className="error-message" />
                       </div>
 
-                      <div>
-                        <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2">
-                          Phone Number
-                        </label>
+                      <div className="floating-label-group">
                         <Field
                           type="tel"
                           id="phone"
                           name="phone"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="+1234567890"
+                          className="floating-input"
+                          placeholder=" "
                         />
-                        <ErrorMessage name="phone" component="div" className="text-red-500 text-sm mt-1" />
+                        <label htmlFor="phone" className="floating-label">
+                          Phone Number
+                        </label>
+                        <ErrorMessage name="phone" component="div" className="error-message" />
                       </div>
                     </div>
 
@@ -466,18 +470,18 @@ const TenantOnboardingForm: React.FC<TenantOnboardingFormProps> = ({ onSuccess }
                       </ul>
                     </div>
 
-                    <div className="flex justify-between">
+                    <div className="onboarding-buttons">
                       <button
                         type="button"
                         onClick={prevStep}
-                        className="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+                        className="onboarding-btn onboarding-btn-secondary"
                       >
-                        Back
+                        ← Back
                       </button>
                       <button
                         type="submit"
                         disabled={isSubmitting || !isValid || !dirty}
-                        className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="onboarding-btn onboarding-btn-primary"
                       >
                         {isSubmitting ? (
                           <div className="flex items-center">
@@ -485,16 +489,15 @@ const TenantOnboardingForm: React.FC<TenantOnboardingFormProps> = ({ onSuccess }
                             Onboarding...
                           </div>
                         ) : (
-                          'Complete Onboarding'
+                          'Complete Onboarding ✓'
                         )}
                       </button>
                     </div>
                   </div>
-                                 )}
-               </Form>
-             )}
-          </Formik>
-        </div>
+                              )}
+            </Form>
+          )}
+        </Formik>
       </div>
     </div>
   );

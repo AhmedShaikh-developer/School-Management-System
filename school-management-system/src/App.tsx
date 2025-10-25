@@ -62,38 +62,141 @@ const SuperAdminContext = createContext<SuperAdminContextType>({
   logout: () => {},
 });
 
+// Theme Context for Dark Mode
+interface ThemeContextType {
+  theme: 'light' | 'dark';
+  toggleTheme: () => void;
+}
+
+const ThemeContext = createContext<ThemeContextType>({
+  theme: 'light',
+  toggleTheme: () => {},
+});
+
+export const useTheme = () => useContext(ThemeContext);
+
+// Theme Provider Component
+const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | null;
+    return savedTheme || 'light';
+  });
+
+  useEffect(() => {
+    // Set data-theme attribute on html element
+    if (theme === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    } else {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'light' ? 'dark' : 'light');
+  };
+
+  return (
+    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+};
+
 // Home/Landing Page Component
 const HomePage: React.FC = () => {
   const navigate = useNavigate();
+  const { theme } = useTheme();
   
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-      <div className="text-center max-w-2xl mx-auto px-4">
-        <h1 className="text-4xl font-bold text-gray-900 mb-6">
+    <div className="home-page-container">
+      {/* Decorative background elements */}
+      <div className="home-decorative-bg">
+        <div className="home-decorative-circle home-decorative-circle-1"></div>
+        <div className="home-decorative-circle home-decorative-circle-2"></div>
+      </div>
+      
+      <div className="home-content">
+        {/* Logo/Icon */}
+        <div className="home-logo-container">
+          <div className="home-logo">
+            <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+            </svg>
+          </div>
+        </div>
+        
+        <h1 className="home-title">
           School Management System
         </h1>
-        <p className="text-xl text-gray-600 mb-8">
-          A comprehensive multi-tenant school management platform
+        <p className="home-subtitle">
+          A comprehensive multi-tenant school management platform designed for excellence
         </p>
-        <div className="space-y-4">
+        
+        {/* Action Buttons */}
+        <div className="home-buttons-container">
           <button
             onClick={() => navigate('/onboarding')}
-            className="w-full md:w-auto px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors mr-4"
+            className="home-button home-button-primary"
           >
-            Start School Onboarding
+            <svg className="home-button-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            <span>New School Onboarding</span>
           </button>
+          
           <button
             onClick={() => navigate('/super-admin/login')}
-            className="w-full md:w-auto px-8 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors mr-4"
+            className="home-button home-button-danger"
           >
-            Super Admin Portal
+            <svg className="home-button-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+            <span>Super Admin Portal</span>
           </button>
+          
           <button
             onClick={() => navigate('/tenant/login')}
-            className="w-full md:w-auto px-8 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            className="home-button home-button-success"
           >
-            School Login
+            <svg className="home-button-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+            </svg>
+            <span>School Login</span>
           </button>
+        </div>
+        
+        {/* Feature highlights */}
+        <div className="home-features">
+          <div className="home-feature-card">
+            <div className="home-feature-icon">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+            </div>
+            <h3 className="home-feature-title">Student Management</h3>
+            <p className="home-feature-description">Efficiently manage student records, attendance, and academic progress with our comprehensive tools.</p>
+          </div>
+          
+          <div className="home-feature-card">
+            <div className="home-feature-icon">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h3 className="home-feature-title">Attendance Tracking</h3>
+            <p className="home-feature-description">Track attendance with QR codes, biometrics, or manual entry for seamless daily operations.</p>
+          </div>
+          
+          <div className="home-feature-card">
+            <div className="home-feature-icon">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h3 className="home-feature-title">Fee Management</h3>
+            <p className="home-feature-description">Handle fee structures, payments, and financial records with ease and transparency.</p>
+          </div>
         </div>
       </div>
     </div>
@@ -887,6 +990,7 @@ const SuperAdminLoginPage: React.FC = () => {
 // Tenant Dashboard Component
 const TenantDashboard: React.FC = () => {
   const { tenantInfo, tenantUser, setIsAuthenticated, setTenantId, setTenantUser, setTenantInfo, setTenantToken, setTenantRefreshToken, tenantId } = useTenant();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [setupStatus, setSetupStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -1098,6 +1202,24 @@ const TenantDashboard: React.FC = () => {
             
             <div className="flex items-center space-x-4">
               <span className="text-sm text-gray-700">Welcome, {tenantUser.name}</span>
+              
+              {/* Theme Toggle Button */}
+              <button
+                onClick={toggleTheme}
+                className="p-2 rounded-md hover:bg-gray-100 transition-colors"
+                aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+                title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+              >
+                {theme === 'light' ? (
+                  <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                  </svg>
+                )}
+              </button>
               
               {/* Enhanced Profile Dropdown */}
               <div className="relative">
@@ -1794,53 +1916,55 @@ function App() {
   }
 
   return (
-    <TenantContext.Provider value={{ 
-      tenantId, 
-      setTenantId, 
-      isAuthenticated: tenantIsAuthenticated, 
-      setIsAuthenticated: setTenantIsAuthenticated,
-      tenantUser,
-      setTenantUser,
-      tenantInfo,
-      setTenantInfo,
-      tenantToken,
-      setTenantToken,
-      tenantRefreshToken,
-      setTenantRefreshToken,
-      refreshBranding
-    }}>
-      <SuperAdminContext.Provider value={{
-        isAuthenticated,
-        user,
-        token,
-        login: handleSuperAdminLogin,
-        logout: handleSuperAdminLogout
+    <ThemeProvider>
+      <TenantContext.Provider value={{ 
+        tenantId, 
+        setTenantId, 
+        isAuthenticated: tenantIsAuthenticated, 
+        setIsAuthenticated: setTenantIsAuthenticated,
+        tenantUser,
+        setTenantUser,
+        tenantInfo,
+        setTenantInfo,
+        tenantToken,
+        setTenantToken,
+        tenantRefreshToken,
+        setTenantRefreshToken,
+        refreshBranding
       }}>
-        <Router>
-          <div className="App">
-            <Routes>
-              <Route path="/" element={<HomePage />} />
-              <Route path="/onboarding" element={<OnboardingPage />} />
-              <Route path="/tenant/login" element={<TenantLoginPage />} />
-              <Route path="/dashboard" element={<TenantDashboard />} />
-              <Route path="/change-password" element={<ChangePassword />} />
-              <Route path="/domain-and-branding" element={<DomainAndBrandingPage />} />
-              <Route path="/attendance" element={<AttendancePage />} />
-              <Route path="/students" element={<StudentManagement />} />
-              <Route path="/classes" element={<ClassManagement />} />
-              <Route path="/academic-years" element={<AcademicYearManagement />} />
-              <Route path="/fees" element={<FeeManagement />} />
-              <Route path="/super-admin/login" element={<SuperAdminLoginPage />} />
-              <Route path="/super-admin/dashboard" element={<SuperAdminDashboard />} />
-              <Route path="/super-admin" element={<Navigate to="/super-admin/login" replace />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-            
-            <ToastContainer position="top-right" autoClose={5000} />
-          </div>
-        </Router>
-      </SuperAdminContext.Provider>
-    </TenantContext.Provider>
+        <SuperAdminContext.Provider value={{
+          isAuthenticated,
+          user,
+          token,
+          login: handleSuperAdminLogin,
+          logout: handleSuperAdminLogout
+        }}>
+          <Router>
+            <div className="App">
+              <Routes>
+                <Route path="/" element={<HomePage />} />
+                <Route path="/onboarding" element={<OnboardingPage />} />
+                <Route path="/tenant/login" element={<TenantLoginPage />} />
+                <Route path="/dashboard" element={<TenantDashboard />} />
+                <Route path="/change-password" element={<ChangePassword />} />
+                <Route path="/domain-and-branding" element={<DomainAndBrandingPage />} />
+                <Route path="/attendance" element={<AttendancePage />} />
+                <Route path="/students" element={<StudentManagement />} />
+                <Route path="/classes" element={<ClassManagement />} />
+                <Route path="/academic-years" element={<AcademicYearManagement />} />
+                <Route path="/fees" element={<FeeManagement />} />
+                <Route path="/super-admin/login" element={<SuperAdminLoginPage />} />
+                <Route path="/super-admin/dashboard" element={<SuperAdminDashboard />} />
+                <Route path="/super-admin" element={<Navigate to="/super-admin/login" replace />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+              
+              <ToastContainer position="top-right" autoClose={5000} />
+            </div>
+          </Router>
+        </SuperAdminContext.Provider>
+      </TenantContext.Provider>
+    </ThemeProvider>
   );
 }
 
